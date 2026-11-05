@@ -1,0 +1,11 @@
+{
+  "name": "beavercoat",
+  "owner": { "name": "SeoKai" },
+  "plugins": [
+    {
+      "name": "beavercoat",
+      "source": "./",
+      "description": "Edit HTML prototypes visually like Photoshop without touching the original files."
+    }
+  ]
+}

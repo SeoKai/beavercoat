@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="36" viewBox="0 0 150 36">
+  <path id="mark-log" d="M4 26 Q18 6 32 26 Z" fill="#C98A4B"/>
+  <circle id="mark-dot" cx="18" cy="12" r="4" fill="#F4E3CF"/>
+  <text id="mark-name" x="40" y="24" fill="#F4E3CF" font-family="Georgia, serif" font-size="16">Dam Coffee</text>
+</svg>

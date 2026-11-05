@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>beavercoat</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #1B1F1E; --panel: #262C2A; --panel2: #303835; --line: #414D49;
+  --text: #E9EEEC; --muted: #A5B1AC; --accent: #4C9BFF; --brand: #C98A4B;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: grid; grid-template: 44px 1fr 26px / 46px 1fr 310px; background: var(--bg); color: var(--text); font: 12.5px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; overflow: hidden; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 4px 9px; min-height: 28px; cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { background: #3C4743; }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--brand); border-color: var(--brand); color: #17120C; font-weight: 600; }
+button.primary:hover:not(:disabled) { background: #DDA063; }
+button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+select, input[type=number], input[type=text], textarea { background: #1D2221; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; min-height: 26px; }
+input[type=number] { width: 100%; min-width: 0; }
+input[type=text] { min-width: 0; width: 100%; }
+textarea { width: 100%; resize: vertical; }
+input[type=range] { width: 100%; min-width: 0; margin: 0; accent-color: var(--accent); }
+input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; flex: 0 0 auto; }
+
+#top { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; }
+#top .title { font-weight: 700; margin-right: 4px; white-space: nowrap; }
+#top .gap { flex: 1; }
+#top .sep { width: 1px; height: 20px; background: var(--line); flex: 0 0 auto; margin: 0 3px; }
+#top label { display: flex; gap: 5px; align-items: center; white-space: nowrap; }
+#page { max-width: 170px; }
+
+#tools { grid-column: 1; grid-row: 2; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0; overflow-y: auto; }
+#tools button { width: 34px; height: 34px; padding: 0; min-height: 0; font-size: 15px; background: none; border-color: transparent; flex: 0 0 auto; }
+#tools button.on { background: var(--accent); }
+#tools button:hover:not(.on) { background: var(--panel2); }
+
+#canvas { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; position: relative; overflow: hidden; background: #111413; }
+#frame { position: absolute; top: 0; left: 0; border: 0; background: #fff; transform-origin: 0 0; }
+#overlay { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; outline: 0; }
+#overlay.passthrough { pointer-events: none; }
+#dropHint { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 8px; display: none; align-items: center; justify-content: center; background: rgba(76,155,255,.12); pointer-events: none; font-size: 15px; font-weight: 600; }
+#dropHint.show { display: flex; }
+#relinkBar { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: #5A3E12; color: #FFE7BF; border: 1px solid #A87B2F; border-radius: 6px; padding: 5px 10px; display: none; align-items: center; gap: 8px; white-space: nowrap; }
+#relinkBar.show { display: flex; }
+
+#side { grid-column: 3; grid-row: 2; background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 38%); min-height: 0; }
+#props { overflow-y: auto; min-height: 0; }
+#dock { border-top: 2px solid #171B1A; display: grid; grid-template-rows: 30px minmax(0, 1fr); min-height: 0; }
+.tabs { display: flex; background: #202523; }
+.tabs button { flex: 1; border: 0; border-radius: 0; background: none; color: var(--muted); min-height: 0; }
+.tabs button.on { background: var(--panel); color: var(--text); font-weight: 600; }
+#layers, #history { overflow-y: auto; min-height: 0; }
+[hidden] { display: none !important; }
+
+.group { border-bottom: 1px solid #1D2221; padding: 9px 11px; }
+.group > h3 { margin: 0 0 7px; font-size: 12px; font-weight: 700; color: var(--text); word-break: break-all; }
+.field { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 7px; margin-top: 5px; color: var(--muted); }
+.field .ctl { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.field .val { flex: 0 0 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.hint { color: var(--muted); margin: 5px 0 0; }
+.warn { background: #4A3512; border: 1px solid #8A6A2A; color: #FFE7BF; border-radius: 6px; padding: 7px 9px; margin-top: 6px; }
+.stop { background: var(--panel2); border-radius: 6px; padding: 5px 8px 8px; margin-top: 6px; }
+.stop .field:first-child { margin-top: 2px; }
+.orphan { background: var(--panel2); border-radius: 6px; padding: 7px 9px; margin-top: 6px; word-break: break-all; }
+
+.layer { display: flex; align-items: center; height: 25px; cursor: pointer; border-bottom: 1px solid #222826; white-space: nowrap; }
+.layer:hover { background: var(--panel2); }
+.layer.sel { background: #24466F; }
+.layer .eye, .layer .arrow { flex: 0 0 22px; text-align: center; color: var(--muted); user-select: none; }
+.layer .eye.off { opacity: .35; }
+.layer .name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.hist { padding: 4px 11px; cursor: pointer; border-bottom: 1px solid #222826; }
+.hist:hover { background: var(--panel2); }
+.hist.cur { background: #24466F; font-weight: 600; }
+.hist.future { opacity: .45; }
+
+#status { grid-column: 1 / -1; grid-row: 3; display: flex; gap: 14px; align-items: center; padding: 0 10px; background: var(--panel); border-top: 1px solid var(--line); color: var(--muted); white-space: nowrap; overflow: hidden; }
+#status .msg { color: #9FD3BC; }
+#status .msg.err { color: #FF9B7D; }
+#status .right { margin-left: auto; }
+
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; max-width: 560px; width: calc(100% - 40px); }
+dialog::backdrop { background: rgba(0,0,0,.5); }
+dialog h3 { margin: 0 0 8px; font-size: 14px; }
+dialog ul { padding-left: 18px; max-height: 240px; overflow: auto; word-break: break-all; color: var(--muted); }
+dialog code { word-break: break-all; }
+</style>
+</head>
+<body>
+<div id="top">
+  <span class="title">🦫 beavercoat</span>
+  <select id="page" title="편집할 페이지"></select>
+  <button id="save" class="primary" title="저장 (⌘S)">저장</button>
+  <button id="undo" title="되돌리기 (⌘Z)">되돌리기</button>
+  <button id="redo" title="다시 실행 (⌘⇧Z)">다시 실행</button>
+  <span class="sep"></span>
+  <select id="device" title="미리 보는 화면 크기">
+    <option value="desktop">데스크톱</option>
+    <option value="tablet">태블릿</option>
+    <option value="mobile">모바일</option>
+  </select>
+  <label id="onlyHereLabel" title="켜면 지금 고르는 화면 크기 이하에서만 바뀌고, 큰 화면은 그대로입니다" hidden><input id="onlyHere" type="checkbox"><span id="onlyHereText">이 화면에만 적용</span></label>
+  <button id="zoomOut" title="축소 (⌘-)">−</button>
+  <button id="zoomLabel" title="화면에 맞추기 (⌘0)">100%</button>
+  <button id="zoomIn" title="확대 (⌘+)">+</button>
+  <button id="compare" title="누르고 있는 동안 원본을 보여 줍니다">원본 비교</button>
+  <span class="gap"></span>
+  <button id="resetAll">전체 초기화</button>
+  <button id="preview">결과 보기</button>
+  <button id="exportViewer" title="서버 없이 더블클릭으로 열리는 HTML 한 장을 만듭니다">보기용 내보내기</button>
+  <button id="exportZip" title="받는 분도 편집할 수 있는 압축 파일을 만듭니다">편집용 압축</button>
+</div>
+<div id="tools"></div>
+<div id="canvas">
+  <iframe id="frame" title="편집 중인 페이지"></iframe>
+  <canvas id="overlay" tabindex="0"></canvas>
+  <div id="dropHint">여기에 놓으면 이미지가 들어갑니다</div>
+  <div id="relinkBar"><span id="relinkText"></span><button id="relinkCancel">취소</button></div>
+</div>
+<div id="side">
+  <div id="props"></div>
+  <div id="dock">
+    <div class="tabs">
+      <button id="tabLayers" class="on">레이어</button>
+      <button id="tabHistory">작업 내역</button>
+    </div>
+    <div id="layers"></div>
+    <div id="history" hidden></div>
+  </div>
+</div>
+<div id="status">
+  <span id="hint"></span>
+  <span id="msg" class="msg"></span>
+  <span id="info" class="right"></span>
+</div>
+<input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml" hidden>
+<input id="svgFile" type="file" accept=".svg,image/svg+xml" hidden>
+<datalist id="palette">
+  <option value="#000000"></option><option value="#333333"></option><option value="#888888"></option>
+  <option value="#CCCCCC"></option><option value="#FFFFFF"></option>
+</datalist>
+<dialog id="dialog"></dialog>
+<script src="/__bc/editor.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; color: #2B211A; background: #FFF9F1; line-height: 1.6; }
+h1, h2, h3, p { margin: 0; }
+.bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 32px; background: #2B211A; }
+.bar a { color: #F4E3CF; margin-left: 20px; text-decoration: none; }
+.logo { height: 36px; display: block; }
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; padding: 72px 32px; background: url("./assets/grain.png") #F4E3CF; }
+.eyebrow { font-size: 14px; letter-spacing: .1em; color: #8A5A2B; margin-bottom: 12px; }
+h1 { font-size: 48px; line-height: 1.2; }
+.lead { margin: 18px 0 28px; }
+.btn { display: inline-block; padding: 12px 22px; background: #2B211A; color: #FFF9F1; border-radius: 8px; text-decoration: none; }
+.dam { width: 100%; height: auto; display: block; }
+.menu { padding: 64px 32px; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
+.card { background: #fff; padding: 22px; border-radius: 12px; border: 1px solid #EADBC8; }
+.visit { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding: 64px 32px; background: #F4E3CF; align-items: center; }
+.slot { min-height: 220px; border: 1px dashed #8A5A2B; border-radius: 12px; }
+.foot { padding: 24px 32px; background: #2B211A; color: #F4E3CF; font-size: 14px; }
+@media (max-width: 720px) {
+  .hero, .visit { grid-template-columns: 1fr; padding: 40px 20px; }
+  .cards { grid-template-columns: 1fr; }
+  h1 { font-size: 36px; }
+}
