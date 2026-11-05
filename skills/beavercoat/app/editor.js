@@ -454,10 +454,12 @@
   function fitZoom() {
     S.zoom = clamp(round((canvasEl.clientWidth - 24) / deviceWidth(), 3), 0.1, 1);
     S.panX = 0;
+    S.manualZoom = false;
     layoutFrame();
   }
   function setZoom(z) {
     S.zoom = clamp(round(z, 3), 0.1, 4);
+    S.manualZoom = true;
     layoutFrame();
   }
 
@@ -1963,7 +1965,8 @@
       uploadAndPlace(file, slot);
     });
 
-    window.addEventListener("resize", layoutFrame);
+    // Keep the page in view when the window changes, unless the user chose a zoom level.
+    window.addEventListener("resize", () => { if (S.manualZoom) layoutFrame(); else fitZoom(); });
     window.addEventListener("beforeunload", (e) => { if (isDirty()) e.preventDefault(); });
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", (e) => { if (e.code === "Space") S.spaceHand = false; });
