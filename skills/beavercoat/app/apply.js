@@ -189,7 +189,8 @@
         const props = scopes[scope];
         if (!props) continue;
         const body = Object.entries(props).map(([k, v]) => `${k}: ${v} !important;`).join(" ");
-        if (body) blocks[scope].push(`[data-bc-t="${tid}"] { ${body} }`);
+        // :not(#id) counts as an id, so the edit also wins over the page's own "#id { ... !important }".
+        if (body) blocks[scope].push(`[data-bc-t="${tid}"]:not(#bc-x):not(#bc-x):not(#bc-x) { ${body} }`);
       }
     }
     return [
@@ -198,6 +199,34 @@
       blocks.mobile.length ? `@media (max-width: ${bp.mobile}px) {\n${blocks.mobile.join("\n")}\n}` : "",
     ].filter(Boolean).join("\n");
   }
+
+  // Returns an element to how the page had it.
+  const putBack = {
+    text(tid) {
+      const saved = originals.text.get(tid);
+      if (saved) saved.el.innerHTML = saved.html;
+      originals.text.delete(tid);
+    },
+    images(tid) {
+      const saved = originals.images.get(tid);
+      if (!saved) return;
+      if (saved.el.tagName === "IMG") {
+        saved.el.setAttribute("src", saved.src);
+        if (saved.srcset != null) saved.el.setAttribute("srcset", saved.srcset);
+        saved.sources.forEach(([source, srcset]) => source.setAttribute("srcset", srcset));
+      } else {
+        saved.el.innerHTML = saved.html;
+        if (saved.style == null) saved.el.removeAttribute("style");
+        else saved.el.setAttribute("style", saved.style);
+      }
+      originals.images.delete(tid);
+    },
+    svg(tid) {
+      const saved = originals.svg.get(tid);
+      if (saved) saved.el.innerHTML = saved.html;
+      originals.svg.delete(tid);
+    },
+  };
 
   function setLines(el, lines) {
     el.replaceChildren();
@@ -213,11 +242,8 @@
 
   function applyText(edits) {
     const wanted = edits.text || {};
-    for (const [tid, saved] of originals.text) {
-      if (!(tid in wanted)) {
-        saved.el.innerHTML = saved.html;
-        originals.text.delete(tid);
-      }
+    for (const tid of originals.text.keys()) {
+      if (!(tid in wanted)) putBack.text(tid);
     }
     for (const [tid, lines] of Object.entries(wanted)) {
       const el = resolved.get(tid);
@@ -239,19 +265,8 @@
 
   function applyImages(edits) {
     const wanted = edits.images || {};
-    for (const [tid, saved] of originals.images) {
-      if (!(tid in wanted)) {
-        if (saved.el.tagName === "IMG") {
-          saved.el.setAttribute("src", saved.src);
-          if (saved.srcset != null) saved.el.setAttribute("srcset", saved.srcset);
-          saved.sources.forEach(([source, srcset]) => source.setAttribute("srcset", srcset));
-        } else {
-          saved.el.innerHTML = saved.html;
-          if (saved.style == null) saved.el.removeAttribute("style");
-          else saved.el.setAttribute("style", saved.style);
-        }
-        originals.images.delete(tid);
-      }
+    for (const tid of originals.images.keys()) {
+      if (!(tid in wanted)) putBack.images(tid);
     }
     for (const [tid, value] of Object.entries(wanted)) {
       const el = resolved.get(tid);
@@ -292,11 +307,8 @@
   // leaveAlone holds SVGs that are open in the editor, whose live contents are the truth.
   function applySvg(edits, leaveAlone) {
     const wanted = edits.inlineSvg || {};
-    for (const [tid, saved] of originals.svg) {
-      if (!(tid in wanted) && !leaveAlone.has(tid)) {
-        saved.el.innerHTML = saved.html;
-        originals.svg.delete(tid);
-      }
+    for (const tid of originals.svg.keys()) {
+      if (!(tid in wanted) && !leaveAlone.has(tid)) putBack.svg(tid);
     }
     for (const [tid, inner] of Object.entries(wanted)) {
       const el = resolved.get(tid);
@@ -354,6 +366,9 @@
       const el = resolved.get(tid);
       if (el) el.removeAttribute("data-bc-t");
       resolved.delete(tid);
+      putBack.text(tid);
+      putBack.images(tid);
+      putBack.svg(tid);
     },
     elementOf: (tid) => resolved.get(tid) || null,
     originalSvg: (tid) => (originals.svg.has(tid) ? originals.svg.get(tid).html : null),

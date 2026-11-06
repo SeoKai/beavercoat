@@ -91,6 +91,18 @@
     return [...el.children].filter((c) => !SKIP_LAYER.has(c.tagName));
   };
 
+  // The text as written. innerText alone would give "WORD" for "word" shown with text-transform.
+  function plainText(el) {
+    const value = el.style.getPropertyValue("text-transform");
+    const priority = el.style.getPropertyPriority("text-transform");
+    el.style.setProperty("text-transform", "none", "important");
+    const text = el.innerText.replace(/\n$/, "");
+    if (value) el.style.setProperty("text-transform", value, priority);
+    else el.style.removeProperty("text-transform");
+    if (el.getAttribute("style") === "") el.removeAttribute("style");
+    return text;
+  }
+
   function isTextLeaf(el) {
     if (!el || isSvgChild(el) || isSvgRoot(el) || el.tagName === "IMG") return false;
     if (![...el.childNodes].every((n) => n.nodeType === 3 || n.nodeName === "BR")) return false;
@@ -148,16 +160,31 @@
   }
   const effective = (key) => mergedMeta(key, viewScopes());
 
-  // Edits a working copy of the visible values, then stores only what changed in the active scope.
+  // Where a change belongs. A value this screen has its own version of would hide a change made
+  // to the shared value, so that version is what gets changed, and the larger screens stay as they are.
+  function scopeFor(store, names) {
+    const scope = writeScope();
+    if (scope !== "base") return scope;
+    for (const s of viewScopes().slice().reverse()) {
+      if (s !== "base" && store && store[s] && names.some((n) => n in store[s])) {
+        say("이 화면에 따로 정한 값이 있어 그 값을 바꿨습니다. 큰 화면은 그대로입니다.");
+        return s;
+      }
+    }
+    return "base";
+  }
+  const PAIRED = { tx: "ty", ty: "tx", sx: "sy", sy: "sx" };
+
+  // Edits a working copy of the visible values, then stores only what changed in the scope it belongs to.
   function withMeta(key, fn) {
     const eff = effective(key);
     const work = clone(eff);
     fn(work);
-    const scope = writeScope();
     const m = E.meta[key] || (E.meta[key] = {});
-    const target = m[scope] || (m[scope] = {});
     for (const k of new Set([...Object.keys(eff), ...Object.keys(work)])) {
       if (same(eff[k], work[k])) continue;
+      const scope = scopeFor(m, PAIRED[k] ? [k, PAIRED[k]] : [k]);
+      const target = m[scope] || (m[scope] = {});
       if (work[k] === undefined) {
         if (scope === "base") delete target[k];
         else target[k] = null;
@@ -165,12 +192,12 @@
         target[k] = work[k];
       }
     }
-    if (!Object.keys(target).length) delete m[scope];
+    for (const scope of SCOPES) if (m[scope] && !Object.keys(m[scope]).length) delete m[scope];
     if (!Object.keys(m).length) delete E.meta[key];
   }
 
   function setStyle(key, prop, value) {
-    const scope = writeScope();
+    const scope = scopeFor(E.styles[key], [prop]);
     const all = E.styles[key] || (E.styles[key] = {});
     const st = all[scope] || (all[scope] = {});
     if (value == null || value === "") delete st[prop];
@@ -256,7 +283,7 @@
   const openInlineSvgs = () => new Set(S.svgs.filter((r) => r.kind === "inline").map((r) => r.ref));
   const applyEdits = () => { if (bc) bc.apply(S.comparing ? {} : E, { leaveSvg: openInlineSvgs() }); };
 
-  const svgSnapshot = () => S.svgs.map((r) => ({ ref: r.ref, inner: r.root.innerHTML, viewBox: r.root.getAttribute("viewBox") }));
+  const svgSnapshot = () => S.svgs.map((r) => ({ ref: r.ref, inner: r.root.innerHTML, viewBox: r.root.getAttribute("viewBox"), attrs: clone(r.rootAttrs) }));
   const snapshot = () => ({ edits: JSON.stringify(E), svgs: svgSnapshot() });
 
   function restoreSvgs(list) {
@@ -266,6 +293,7 @@
       if (rec.root.innerHTML !== inner) rec.root.innerHTML = inner;
       const vb = st ? st.viewBox : rec.baselineViewBox;
       if (vb) rec.root.setAttribute("viewBox", vb);
+      if (st && st.attrs) rec.rootAttrs = clone(st.attrs);
     }
   }
 
@@ -276,7 +304,7 @@
     applyEdits();
     const now = Date.now();
     const group = opts.group || null;
-    const coalesce = group ? S.lastGroup === group : S.lastLabel === label && now - S.lastTime < 700 && !S.lastGroup;
+    const coalesce = group ? S.lastGroup === group : S.lastLabel === label && S.lastSel === S.sel && now - S.lastTime < 700 && !S.lastGroup;
     if (coalesce && S.idx > 0) {
       S.history[S.idx] = { label, ...snapshot() };
       if (S.savedIdx === S.idx) S.savedIdx = -1;
@@ -291,6 +319,7 @@
       S.idx = S.history.length - 1;
     }
     S.lastLabel = label;
+    S.lastSel = S.sel;
     S.lastTime = now;
     S.lastGroup = group;
     renderHistory();
@@ -301,19 +330,35 @@
     if (i < 0 || i >= S.history.length) return;
     S.idx = i;
     const st = S.history[i];
+    const before = E.targets;
+    const openRoot = isSvgChild(S.sel) ? rootSvgOf(S.sel) : null;
     E = JSON.parse(st.edits);
+    // A target that points elsewhere now was relinked: let go of the old element so it finds its place again.
+    for (const [tid, target] of Object.entries(E.targets)) {
+      if (before[tid] && !same(before[tid], target)) bc.unbind(tid);
+      S.targetLog[tid] = target;
+    }
     restoreSvgs(st.svgs);
     applyEdits();
     S.lastLabel = null;
     S.lastGroup = null;
     S.anchor = null;
-    if (isSvgChild(S.sel)) S.sel = doc.getElementById(S.selChildId) || null;
-    else if (S.key) S.sel = elementOf(S.key);
+    if (openRoot) {
+      S.sel = doc.getElementById(S.selChildId);
+      // The shape itself was undone, so the SVG holding it stays selected.
+      if (!S.sel) {
+        renderAll();
+        select(openRoot);
+        return;
+      }
+    } else if (S.key) {
+      S.sel = elementOf(S.key);
+    }
     if (!S.sel) S.key = null;
     renderAll();
   }
 
-  const isDirty = () => S.idx !== S.savedIdx;
+  const isDirty = () => S.idx !== S.savedIdx || !!(S.editing && plainText(S.editing.el) !== S.editing.before);
 
   // ---------- saving ----------
   function serializeFileSvg(rec) {
@@ -1046,12 +1091,22 @@
   }
   const currentTool = () => (S.spaceHand ? "hand" : S.tool);
 
+  // On a small element the handles would cover it entirely, so inside it always means moving.
+  function insideSmallSelection(p) {
+    if (!S.sel || !S.sel.getBoundingClientRect) return false;
+    const r = S.sel.getBoundingClientRect();
+    const a = toCanvas(r.left, r.top), b = toCanvas(r.right, r.bottom);
+    if (b.x - a.x >= 40 && b.y - a.y >= 40) return false;
+    return p.x >= a.x && p.x <= b.x && p.y >= a.y && p.y <= b.y;
+  }
+  const hitFor = (p, tool) => (tool === "move" && insideSmallSelection(p) ? null : hitAt(p));
+
   // ---------- pointer ----------
   function onPointerMove(e) {
     const p = eventPoint(e);
     if (S.drag) { S.drag.move(p, e); return; }
-    const hit = hitAt(p);
     const tool = currentTool();
+    const hit = hitFor(p, tool);
     if (tool === "hand") overlay.style.cursor = "grab";
     else if (hit) overlay.style.cursor = CURSORS[hit.kind] || "pointer";
     else if (["pen", "rect", "ellipse", "line", "gradient"].includes(tool)) overlay.style.cursor = "crosshair";
@@ -1074,7 +1129,7 @@
     const p = eventPoint(e);
     const f = toFrame(p.x, p.y);
     if (S.relinking) { finishRelink(pick(f.x, f.y)); return; }
-    const hit = hitAt(p);
+    const hit = hitFor(p, currentTool());
     switch (currentTool()) {
       case "hand": return startPan(e, p);
       case "move": return downMove(e, p, f, hit);
@@ -1396,7 +1451,7 @@
   function startTextEdit(el) {
     endTextEdit(true);
     select(el);
-    S.editing = { el, key: S.key, html: el.innerHTML, before: el.innerText };
+    S.editing = { el, key: S.key, html: el.innerHTML, before: plainText(el) };
     el.contentEditable = "plaintext-only";
     overlay.classList.add("passthrough");
     el.focus();
@@ -1407,10 +1462,14 @@
     sel.addRange(range);
     el.addEventListener("blur", onEditBlur);
     el.addEventListener("keydown", onEditKey);
+    el.addEventListener("input", onEditInput);
   }
   function onEditBlur() { endTextEdit(true); }
+  function onEditInput() { renderTop(); }
   function onEditKey(e) {
-    if (e.key === "Escape") { e.preventDefault(); endTextEdit(false); }
+    // Keys pressed in the page don't reach the editor's own handler, so saving is caught here too.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(); }
+    else if (e.key === "Escape") { e.preventDefault(); endTextEdit(false); }
     else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); endTextEdit(true); }
   }
   function endTextEdit(commit) {
@@ -1420,9 +1479,10 @@
     const { el, key } = st;
     el.removeEventListener("blur", onEditBlur);
     el.removeEventListener("keydown", onEditKey);
+    el.removeEventListener("input", onEditInput);
     el.removeAttribute("contenteditable");
     overlay.classList.remove("passthrough");
-    const after = el.innerText.replace(/\n$/, "");
+    const after = plainText(el);
     el.innerHTML = st.html; // Restore first so "reset" can return to the original later.
     if (commit && after !== st.before) {
       mutate("글자 수정", () => { E.text[key] = after.split("\n"); }, { compile: false });
@@ -1564,7 +1624,7 @@
   function renderScopeNotice(box, el) {
     const key = S.key;
     if (writeScope() !== "base") {
-      box.append(h("div", { class: "group" }, h("div", { class: "warn" }, `${S.device === "mobile" ? "모바일" : "태블릿 이하"}에만 적용 중입니다. 큰 화면은 그대로입니다.`)));
+      box.append(h("div", { class: "group" }, h("div", { class: "warn" }, `${S.device === "mobile" ? "모바일" : "태블릿 이하"}에만 적용 중입니다. 큰 화면은 그대로입니다. 글자·이미지·SVG 수정은 모든 화면에 적용됩니다.`)));
     }
     const labels = exceptionLabels(key);
     if (labels.length) {
@@ -1650,7 +1710,7 @@
     const g = group("글자");
     if (isTextLeaf(el)) {
       g.append(h("textarea", {
-        rows: 2, value: el.innerText,
+        rows: 2, value: plainText(el),
         onchange: (e) => {
           mutate("글자 수정", () => { E.text[k] = e.target.value.split("\n"); }, { compile: false });
           $("info").textContent = nameOf(el);
@@ -2068,14 +2128,7 @@
         rec.root.innerHTML = st ? st.inner : rec.baseline;
         continue;
       }
-      if (rec.origInner == null) {
-        if (rec.kind === "file") {
-          const res = await fetch("/" + rec.ref.split("/").map(encodeURIComponent).join("/") + "?bc-original=1", { cache: "no-store" });
-          rec.origInner = new DOMParser().parseFromString(await res.text(), "image/svg+xml").documentElement.innerHTML;
-        } else {
-          rec.origInner = rec.baseline;
-        }
-      }
+      if (rec.origInner == null) rec.origInner = (await originalSvgFile(rec)).inner;
       if (S.comparing) rec.root.innerHTML = rec.origInner;
     }
   }
@@ -2193,6 +2246,11 @@
     let state;
     const res = await fetch("/__bc/state" + (params.get("page") ? "?page=" + encodeURIComponent(params.get("page")) : ""), { cache: "no-store" });
     state = await res.json();
+    if (res.status === 409) {
+      // Nothing is opened for editing, because saving would replace the damaged file.
+      say(`저장된 편집 파일이 손상되어 열 수 없습니다. 파일을 고치거나 지운 뒤 다시 열어 주세요: ${state.file}`, true);
+      return;
+    }
     if (!res.ok || !state.page) {
       say(state.pages && state.pages.length ? "페이지를 찾지 못했습니다. 목록에서 골라 주세요." : "이 폴더에서 HTML 파일을 찾지 못했습니다.", true);
       if (!state.pages || !state.pages.length) return;

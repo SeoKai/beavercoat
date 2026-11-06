@@ -165,10 +165,13 @@ class Project:
             for name in sorted(names):
                 if name in SKIP_FILES or name.endswith(".tmp"):
                     continue
-                if not rel_base and name.lower().endswith(".zip"):
-                    continue
                 rel = rel_base + name
                 full = os.path.join(base, name)
+                if not rel_base and self._is_bundle_file(name, full):
+                    continue
+                if not rel_base and name.lower().endswith(".zip"):
+                    skipped.append(f"{rel}: 압축 파일이라 포함하지 않았습니다")
+                    continue
                 if os.path.islink(full):
                     target = os.path.realpath(full)
                     if not os.path.exists(target):
@@ -182,6 +185,20 @@ class Project:
                     continue
                 files.append(rel)
         return files, skipped
+
+    @staticmethod
+    def _is_bundle_file(name, full):
+        """Launchers and the guide a received zip came with. They are added back to any new zip."""
+        name = nfc(name)
+        if name in launcher_files():
+            return True
+        if name != RECIPIENT_GUIDE:
+            return False
+        try:
+            with open(full, "rb") as f:
+                return f.read() == README_FOR_RECIPIENT.encode("utf-8")
+        except OSError:
+            return False
 
     def walk_files(self):
         return self.scan()[0]
@@ -209,6 +226,13 @@ class Project:
                 data = json.load(f)
         except FileNotFoundError:
             return json.loads(json.dumps(EMPTY_EDITS))
+        problem = not isinstance(data, dict)
+        if not problem:
+            problem = any(not isinstance(data.get(k, {}), dict) for k in ("targets", "styles", "meta", "text", "images", "inlineSvg"))
+        if not problem:
+            problem = any(not isinstance(v, str) for v in data.get("images", {}).values())
+        if problem:
+            raise ValueError("unexpected contents in edits file")
         return {**json.loads(json.dumps(EMPTY_EDITS)), **data}
 
     def svg_override(self, rel):
@@ -640,7 +664,8 @@ def build_viewer(project, page):
                     inliner.warnings.append(f"넣은 이미지를 찾지 못했습니다: {value[7:]}")
         snippet = edits_snippet(edits, "") + f"<script>{apply_source()}</script>"
     html = page_with_snippet(html, snippet)
-    stem = re.sub(r"\.html?$", "", posixpath.basename(page), flags=re.I)
+    # Folder names stay in the file name, or a/index.html and b/index.html would overwrite each other.
+    stem = re.sub(r"\.html?$", "", page.replace("/", "-"), flags=re.I)
     out = os.path.join(project.share_dir(), f"{stem}-보기용.html")
     write_atomic(out, html.encode("utf-8"))
     return out, sorted(set(inliner.warnings))
@@ -664,6 +689,7 @@ def launcher_files():
     return {"편집기 열기.command": (mac, 0o755), "편집기 열기.bat": (win, 0o644)}
 
 
+RECIPIENT_GUIDE = "사용법.txt"
 README_FOR_RECIPIENT = """HTML 프로토타입과 편집기 beavercoat
 
 [여는 방법]
@@ -720,7 +746,8 @@ def build_zip(project):
     os.close(fd)
     try:
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-            for rel in project.walk_files():
+            sources = project.walk_files()
+            for rel in sources:
                 add_project_file(z, project.path(*rel.split("/")), rel)
             for base, _, files in os.walk(project.path(EDITS_DIR)):
                 for name in sorted(files):
@@ -738,7 +765,8 @@ def build_zip(project):
                 add_file(z, os.path.join(APP_DIR, name), f"{BUNDLED_APP_DIR}/{name}")
             for name, (text, mode) in launcher_files().items():
                 add_text(z, name, text, mode)
-            add_text(z, "사용법.txt", README_FOR_RECIPIENT)
+            if RECIPIENT_GUIDE not in {nfc(rel) for rel in sources}:
+                add_text(z, RECIPIENT_GUIDE, README_FOR_RECIPIENT)
         os.chmod(tmp, 0o644)
         os.replace(tmp, out)
     except BaseException:
@@ -825,7 +853,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.send_error(404, "Not found")
         if rel.lower().endswith(HTML_EXTS) and os.path.isfile(full):
             html = read_text(full)
-            edits = self.project.load_edits(rel)
+            try:
+                edits = self.project.load_edits(rel)
+            except ValueError:
+                edits = EMPTY_EDITS  # The editor reports the damaged file. The page still opens.
             snippet = edits_snippet(edits, f"/{EDITS_DIR}/uploads/") + '<script src="/__bc/apply.js"></script>'
             return self._send(200, page_with_snippet(html, snippet).encode("utf-8"), "text/html; charset=utf-8")
         if rel.lower().endswith(".svg") and "bc-original" not in query:
@@ -843,7 +874,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             page = query.get("page", [self.project.default_page()])[0]
             if page not in pages:
                 return self._json(404, {"error": "page not found", "pages": pages})
-            return self._json(200, {"project": self.project.name, "pages": pages, "page": page, "edits": self.project.load_edits(page)})
+            try:
+                edits = self.project.load_edits(page)
+            except ValueError:
+                file = os.path.relpath(self.project.edits_file(page), self.project.root).replace(os.sep, "/")
+                return self._json(409, {"error": "damaged edits", "file": file, "pages": pages, "page": page})
+            return self._json(200, {"project": self.project.name, "pages": pages, "page": page, "edits": edits})
         return self.send_error(404, "Not found")
 
     def do_POST(self):
@@ -945,6 +981,14 @@ def start_server(project, port_arg):
     sys.exit("사용할 수 있는 포트를 찾지 못했습니다. --port로 다른 번호를 지정해 주세요.")
 
 
+def page_argument(project, given):
+    """A project-relative page path from what was typed: ./x.html, .\\x.html or a full path."""
+    if os.path.isabs(given):
+        inside = os.path.relpath(os.path.realpath(given), os.path.realpath(project.root))
+        given = inside if not inside.startswith("..") else given
+    return posixpath.normpath(given.replace("\\", "/"))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Edit HTML prototypes without touching the originals.")
     parser.add_argument("folder", nargs="?", default=".")
@@ -958,7 +1002,7 @@ def main():
     if not os.path.isdir(args.folder):
         sys.exit(f"폴더를 찾지 못했습니다: {args.folder}")
     project = Project(args.folder)
-    page = args.page or project.default_page()
+    page = page_argument(project, args.page) if args.page else project.default_page()
     if page is None:
         sys.exit("이 폴더에서 HTML 파일을 찾지 못했습니다.")
     if page not in project.pages():
@@ -971,7 +1015,10 @@ def main():
             print("주의:", message)
         return
     if args.export == "viewer":
-        out, warnings = build_viewer(project, page)
+        try:
+            out, warnings = build_viewer(project, page)
+        except ValueError:
+            sys.exit(f"저장된 편집 파일이 손상되었습니다: {os.path.relpath(project.edits_file(page), project.root)}")
         print(out)
         for w in warnings:
             print("주의:", w)

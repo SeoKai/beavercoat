@@ -160,6 +160,20 @@ class RepeatedElementTest(BrowserCase):
         self.assertEqual(self.bound(self.dom(self.base + "p.html")), "고유한 글")
 
 
+class StylePriorityTest(BrowserCase):
+    def test_edit_beats_important_rule_with_an_id(self):
+        html = '<!doctype html><html><head><style>#x{color:blue!important}</style></head><body><p id="x">글</p></body></html>'
+        self.edit(self.capture(html, "p"), styles=RED)
+        self.page(html.replace("</body>", "<script>addEventListener('load',()=>{document.title=getComputedStyle(document.getElementById('x')).color})</script></body>"))
+        self.assertIn("<title>rgb(255, 0, 0)</title>", self.dom(self.base + "p.html"))
+
+    def test_unusual_tag_name_does_not_throw(self):
+        html = '<!doctype html><html><body><o:p>글자</o:p><p>다른 글</p></body></html>'
+        self.page(html)
+        self.edit({"selector": "p", "fp": {"tag": "o:p", "text": "글자", "cls": "", "path": "o:p"}}, styles=RED)
+        self.assertIn('data-bc-t="t1">글자<', self.dom(self.base + "p.html"))
+
+
 class ImageTest(BrowserCase):
     def setUp(self):
         super().setUp()

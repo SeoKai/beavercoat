@@ -11,6 +11,7 @@ import tempfile
 import threading
 import unicodedata
 import unittest
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -465,6 +466,90 @@ class ViewerInliningTest(ProjectCase):
         _, warnings = self.viewer('<img src="nope.png"><link rel="stylesheet" href="nope.css"><script src="nope.js"></script>')
         for name in ("nope.png", "nope.css", "nope.js"):
             self.assertTrue(any(name in w for w in warnings), name)
+
+
+class SmallFixesTest(ProjectCase):
+    def corrupt(self, page="index.html", text="{broken"):
+        path = self.project.edits_file(page)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        Path(path).write_text(text, encoding="utf-8")
+        return path
+
+    def test_damaged_edits_are_reported_and_not_replaced(self):
+        for text in ("{broken", "[]", '{"images": []}', '{"images": {"t": 1}}'):
+            path = self.corrupt(text=text)
+            with self.assertRaises(ValueError):
+                self.project.load_edits("index.html")
+            server, _ = bc.start_server(self.project, 0)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1])
+                host = f"127.0.0.1:{server.server_address[1]}"
+                conn.request("GET", "/__bc/state?page=index.html", headers={"Host": host})
+                res = conn.getresponse()
+                body = json.loads(res.read())
+                self.assertEqual(res.status, 409)
+                self.assertIn("index.html.json", body["file"])
+                conn.request("GET", "/index.html", headers={"Host": host})
+                res = conn.getresponse()
+                res.read()
+                self.assertEqual(res.status, 200)
+                conn.close()
+            finally:
+                server.shutdown()
+                server.server_close()
+            self.assertEqual(Path(path).read_text(encoding="utf-8"), text)
+        out, skipped = bc.build_results(self.project)
+        self.assertTrue(os.path.isfile(os.path.join(out, "index.html")))
+        self.assertTrue(any("index.html" in m for m in skipped))
+
+    def test_rezipping_a_received_folder_does_not_duplicate(self):
+        out, _ = bc.build_zip(self.project)
+        unpacked = os.path.join(self.dir, "unpacked")
+        with zipfile.ZipFile(out) as z:
+            z.extractall(unpacked)
+        project = bc.Project(os.path.join(unpacked, "내 시안"))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            again, _ = bc.build_zip(project)
+        with zipfile.ZipFile(again) as z:
+            names = z.namelist()
+        self.assertEqual(len(names), len(set(names)))
+        self.assertFalse(any("결과/편집기 열기" in n or "결과/사용법" in n for n in names))
+        self.assertIn("내 시안/편집기 열기.command", names)
+
+    def test_own_guide_file_with_that_name_is_kept(self):
+        Path(self.root, "사용법.txt").write_text("내가 쓴 글", encoding="utf-8")
+        out, _ = bc.build_zip(self.project)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+            self.assertEqual(names.count("내 시안/사용법.txt"), 1)
+            self.assertEqual(z.read("내 시안/사용법.txt").decode("utf-8"), "내가 쓴 글")
+
+    def test_same_named_pages_get_separate_viewers(self):
+        for folder in ("a", "b"):
+            os.mkdir(os.path.join(self.root, folder))
+            Path(self.root, folder, "index.html").write_text(f"<p>{folder}</p>", encoding="utf-8")
+        first, _ = bc.build_viewer(self.project, "a/index.html")
+        second, _ = bc.build_viewer(self.project, "b/index.html")
+        top, _ = bc.build_viewer(self.project, "index.html")
+        self.assertEqual(len({first, second, top}), 3)
+        self.assertEqual(os.path.basename(first), "a-index-보기용.html")
+        self.assertEqual(os.path.basename(top), "index-보기용.html")
+
+    def test_page_argument_forms(self):
+        for given in ("index.html", "./index.html", ".\\index.html", os.path.join(self.root, "index.html")):
+            self.assertEqual(bc.page_argument(self.project, given), "index.html", given)
+        self.assertEqual(bc.page_argument(self.project, "../index.html"), "../index.html")
+
+    def test_top_level_zip_is_listed_as_left_out(self):
+        Path(self.root, "자료.zip").write_bytes(b"PK")
+        _, skipped = bc.build_results(self.project)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "결과", "자료.zip")))
+        self.assertTrue(any("자료.zip" in m for m in skipped))
+
+    def test_uppercase_script_end_cannot_break_out(self):
+        self.assertNotIn("</SCRIPT", bc.escape_inline_js("a='</SCRIPT>'"))
 
 
 if __name__ == "__main__":
