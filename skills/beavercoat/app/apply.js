@@ -9,7 +9,8 @@
 
   const normalize = (s) => String(s || "").replace(/\s+/g, " ").trim();
   const srcName = (el) => {
-    const v = el.getAttribute && el.getAttribute("src");
+    // Exported viewers replace src with embedded data and keep the original name beside it.
+    const v = el.getAttribute && (el.getAttribute("data-bc-src") || el.getAttribute("src"));
     return v ? v.split("#")[0].split("?")[0].split("/").pop() : "";
   };
 
@@ -41,20 +42,63 @@
 
   const neighborText = (el) => (el ? normalize(el.textContent).slice(0, 60) : "");
 
+  // Text of the nearest ancestor that says more than the element itself: a repeated button's card.
+  function contextOf(el) {
+    const own = normalize(el.textContent);
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+      const text = normalize(node.textContent);
+      if (text !== own) return text.slice(0, 200);
+    }
+    return "";
+  }
+
+  const contentOf = (el) => normalize(el.textContent).slice(0, 120);
+
+  function sameContent(fp) {
+    const matches = fp.src ? (el) => srcName(el) === fp.src : (el) => contentOf(el) === fp.text;
+    return [...document.body.querySelectorAll(CSS.escape(fp.tag))].filter((el) => !el.closest("x-dc template") && matches(el));
+  }
+
+  // Runs fn with applied text and placed images taken back out, so what gets remembered
+  // describes the original page, which is what the next load will find.
+  function withOriginalContent(target, fn) {
+    const undo = [];
+    const revert = (saved) => {
+      const el = saved.el;
+      if (!el.isConnected || saved.html == null || (el !== target && el.contains(target))) return;
+      if (el.innerHTML !== saved.html) {
+        undo.push([el, el.innerHTML]);
+        el.innerHTML = saved.html;
+      }
+    };
+    originals.text.forEach(revert);
+    originals.images.forEach((saved) => { if (saved.el.tagName !== "IMG") revert(saved); });
+    try {
+      return fn();
+    } finally {
+      undo.reverse().forEach(([el, html]) => { el.innerHTML = html; });
+    }
+  }
+
   // Details remembered about an element so it can be found again if the page is re-exported.
   function fingerprint(el) {
-    return {
-      tag: el.tagName.toLowerCase(),
-      id: el.id || "",
-      cls: classesOf(el),
-      text: el.tagName === "IMG" ? "" : normalize(el.textContent).slice(0, 120),
-      src: srcName(el),
-      path: pathOf(el),
-      kids: el.children.length,
-      structure: structureOf(el),
-      prev: neighborText(el.previousElementSibling),
-      next: neighborText(el.nextElementSibling),
-    };
+    return withOriginalContent(el, () => {
+      const fp = {
+        tag: el.tagName.toLowerCase(),
+        id: el.id || "",
+        cls: classesOf(el),
+        text: el.tagName === "IMG" ? "" : contentOf(el),
+        src: srcName(el),
+        path: pathOf(el),
+        kids: el.children.length,
+        structure: structureOf(el),
+        prev: neighborText(el.previousElementSibling),
+        next: neighborText(el.nextElementSibling),
+        ctx: contextOf(el),
+      };
+      fp.dup = fp.src || fp.text ? sameContent(fp).length : 0;
+      return fp;
+    });
   }
 
   function selectorFor(el) {
@@ -98,23 +142,23 @@
       if (byId) return byId.tagName.toLowerCase() === fp.tag || fp.tag === "img" || byId.tagName.toLowerCase() === "svg" ? byId : null;
     }
     const atPath = query(target.selector);
-    const content = fp.src || fp.text;
-    const matchesContent = (el) => (fp.src ? srcName(el) === fp.src : normalize(el.textContent).slice(0, 120) === fp.text);
-    const allowTag = (el) => el.tagName.toLowerCase() === fp.tag;
-
-    if (atPath && allowTag(atPath) && content && matchesContent(atPath) && classesOf(atPath) === fp.cls) return atPath;
-
-    if (content) {
-      const same = [...document.body.querySelectorAll(fp.tag)].filter((el) => !el.closest("x-dc template") && matchesContent(el));
-      if (same.length === 1) return same[0];
-      if (same.length > 1) {
-        const exact = same.filter((el) => classesOf(el) === fp.cls && pathOf(el) === fp.path && el.children.length === fp.kids);
+    if (fp.src || fp.text) {
+      const same = sameContent(fp);
+      // Repeated content can't identify an element, even if only one copy is left now: the edited
+      // one may be the copy that was removed. Only its surroundings can, and if they don't, nothing is applied.
+      if (same.length > 1 || fp.dup > 1) {
+        const hasContext = (el) => fp.ctx === undefined || contextOf(el) === fp.ctx;
+        const exact = same.filter((el) => sameSpot(el, fp) && hasContext(el));
         if (atPath && exact.includes(atPath)) return atPath;
-        return exact.length === 1 ? exact[0] : null;
+        if (exact.length) return exact.length === 1 ? exact[0] : null;
+        if (!fp.ctx) return null;
+        // Something else on the page changed, but this one's own card is still recognisable.
+        const inContext = same.filter((el) => classesOf(el) === fp.cls && contextOf(el) === fp.ctx);
+        return inContext.length === 1 ? inContext[0] : null;
       }
-      // Only the content changed: accept the same spot only if everything else still lines up.
-      return atPath && sameSpot(atPath, fp) ? atPath : null;
+      if (same.length === 1) return same[0];
     }
+    // No content to go by, or only the content changed: everything else must still line up.
     return atPath && sameSpot(atPath, fp) ? atPath : null;
   }
 
@@ -178,9 +222,18 @@
     for (const [tid, lines] of Object.entries(wanted)) {
       const el = resolved.get(tid);
       if (!el) continue;
-      const saved = originals.text.get(tid);
-      if (!saved || saved.el !== el) originals.text.set(tid, { el, html: el.innerHTML });
-      if (el.innerText !== lines.join("\n")) setLines(el, lines);
+      let saved = originals.text.get(tid);
+      if (!saved || saved.el !== el) {
+        saved = { el, html: el.innerHTML, wanted: null, written: null };
+        originals.text.set(tid, saved);
+      }
+      // Compare against what was written, never against rendered text: spaces and text-transform
+      // can make those differ forever, and rewriting would trigger the mutation observer again.
+      const text = lines.join("\n");
+      if (saved.wanted === text && el.innerHTML === saved.written) continue;
+      setLines(el, lines);
+      saved.wanted = text;
+      saved.written = el.innerHTML;
     }
   }
 
@@ -190,6 +243,8 @@
       if (!(tid in wanted)) {
         if (saved.el.tagName === "IMG") {
           saved.el.setAttribute("src", saved.src);
+          if (saved.srcset != null) saved.el.setAttribute("srcset", saved.srcset);
+          saved.sources.forEach(([source, srcset]) => source.setAttribute("srcset", srcset));
         } else {
           saved.el.innerHTML = saved.html;
           if (saved.style == null) saved.el.removeAttribute("style");
@@ -204,9 +259,17 @@
       const url = imageUrl(value);
       const saved = originals.images.get(tid);
       if (!saved || saved.el !== el) {
-        originals.images.set(tid, { el, src: el.getAttribute("src"), html: el.innerHTML, style: el.getAttribute("style") });
+        const picture = el.tagName === "IMG" && el.parentElement && el.parentElement.tagName === "PICTURE" ? el.parentElement : null;
+        const sources = picture ? [...picture.querySelectorAll(":scope > source[srcset]")] : [];
+        originals.images.set(tid, {
+          el, src: el.getAttribute("src"), html: el.innerHTML, style: el.getAttribute("style"),
+          srcset: el.getAttribute("srcset"), sources: sources.map((s) => [s, s.getAttribute("srcset")]),
+        });
       }
       if (el.tagName === "IMG") {
+        // Browsers prefer srcset and <source> over src, so they must go for the new image to show.
+        el.removeAttribute("srcset");
+        originals.images.get(tid).sources.forEach(([source]) => source.removeAttribute("srcset"));
         if (el.getAttribute("src") !== url) el.setAttribute("src", url);
         continue;
       }
@@ -226,27 +289,37 @@
     }
   }
 
-  function applySvg(edits) {
+  // leaveAlone holds SVGs that are open in the editor, whose live contents are the truth.
+  function applySvg(edits, leaveAlone) {
     const wanted = edits.inlineSvg || {};
     for (const [tid, saved] of originals.svg) {
-      if (!(tid in wanted)) {
+      if (!(tid in wanted) && !leaveAlone.has(tid)) {
         saved.el.innerHTML = saved.html;
         originals.svg.delete(tid);
       }
     }
     for (const [tid, inner] of Object.entries(wanted)) {
       const el = resolved.get(tid);
-      if (!el) continue;
-      const saved = originals.svg.get(tid);
-      if (!saved || saved.el !== el) originals.svg.set(tid, { el, html: el.innerHTML });
-      if (el.innerHTML !== inner) el.innerHTML = inner;
+      if (!el || leaveAlone.has(tid)) continue;
+      let saved = originals.svg.get(tid);
+      if (!saved || saved.el !== el) {
+        saved = { el, html: el.innerHTML, wanted: null, written: null };
+        originals.svg.set(tid, saved);
+      }
+      // innerHTML can read back differently from what was set, so remember what it became.
+      if (saved.wanted === inner && el.innerHTML === saved.written) continue;
+      el.innerHTML = inner;
+      saved.wanted = inner;
+      saved.written = el.innerHTML;
     }
   }
 
   // Some design-tool runtimes render later. Their template must not be touched first,
   // because it gets replaced when the page is drawn.
   function pageReady() {
-    if (!document.body) return false;
+    // Until the whole page is parsed, a copy of an element may still be coming,
+    // so "only one like this" can't be trusted yet.
+    if (!document.body || document.readyState === "loading") return false;
     if (document.querySelector("x-dc")) return !!document.querySelector("[data-dc-tpl]");
     return true;
   }
@@ -266,7 +339,7 @@
     const waiting = resolveAll(edits);
     applyImages(edits);
     applyText(edits);
-    if (!opts.skipSvg) applySvg(edits);
+    applySvg(edits, opts.leaveSvg || new Set());
     window.__BC_STATUS__ = { orphans };
     return waiting;
   }
@@ -283,6 +356,7 @@
       resolved.delete(tid);
     },
     elementOf: (tid) => resolved.get(tid) || null,
+    originalSvg: (tid) => (originals.svg.has(tid) ? originals.svg.get(tid).html : null),
     orphans: () => orphans.slice(),
   };
 
@@ -290,11 +364,20 @@
   apply(data);
   const hasTargets = Object.keys(data.targets || {}).length > 0;
   if (hasTargets) {
-    const observer = new MutationObserver(() => {
+    let scheduled = false;
+    const run = () => {
+      scheduled = false;
       if (window.__bcEditorActive) return observer.disconnect();
       if (!apply(data)) observer.disconnect();
+    };
+    // Through a timer, not directly: the page keeps running even if something here ever keeps changing the page.
+    const observer = new MutationObserver(() => {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(run, 0);
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
     const stop = () => setTimeout(() => observer.disconnect(), 5000);
     if (document.readyState === "complete") stop();
     else addEventListener("load", stop);

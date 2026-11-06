@@ -10,6 +10,7 @@ A visual editor for HTML prototypes. Originals stay untouched:
 - `.design-edits/`: saved edits, inside the project folder
 - `결과/`: a copy with edits applied, rebuilt on every save
 - `공유/`: files to send to someone
+- If the project already has its own folder with one of those names, `결과-beavercoat/` or `공유-beavercoat/` is used instead. The command prints the folder it used.
 
 The app lives in `app/` beside this file. It needs Python 3 and nothing else.
 

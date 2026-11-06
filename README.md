@@ -51,6 +51,8 @@ python3 skills/beavercoat/app/beavercoat.py samples/basic
 | `결과/` | A copy with edits applied, rebuilt on every save |
 | `공유/` | Files you exported to send |
 
+If the project already has its own `결과/` or `공유/` folder, it is left alone and `결과-beavercoat/` or `공유-beavercoat/` is used instead. Hidden files such as `.env`, key files, and links pointing outside the project stay out of results and zips, and you are told which were left out.
+
 ## Sharing
 
 - **보기용 내보내기 (view-only):** one HTML file. It opens by double-click with no server or Python. Web fonts and files hosted elsewhere still need internet, and the editor lists them when you export.

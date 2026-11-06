@@ -19,7 +19,8 @@
   ];
   const DEVICES = { desktop: 1440, tablet: 768, mobile: 375 };
   const SCOPES = ["base", "tablet", "mobile"];
-  const COMPILED = ["translate", "rotate", "scale", "filter", "background-image", "mask-image", "-webkit-mask-image", "clip-path"];
+  const COMPILED = ["translate", "rotate", "scale", "filter", "background-image", "mask-image", "-webkit-mask-image", "clip-path", "display"];
+  const MOVABLE_INLINE = new Set(["IMG", "VIDEO", "AUDIO", "CANVAS", "IFRAME", "OBJECT", "EMBED", "INPUT", "BUTTON", "SELECT", "TEXTAREA", "METER", "PROGRESS"]);
   const SKIP_LAYER = new Set(["STYLE", "SCRIPT", "BR", "LINK", "META", "TITLE", "NOSCRIPT", "TEMPLATE", "HELMET", "title", "defs", "linearGradient", "radialGradient", "stop", "desc", "metadata", "style", "clipPath", "mask"]);
   const SHAPE_NAMES = { path: "경로", circle: "원", ellipse: "타원", rect: "사각형", line: "직선", text: "글자", g: "그룹", polygon: "다각형", polyline: "꺾은선", use: "복제 도형", image: "이미지" };
   const BLEND = ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"];
@@ -37,7 +38,7 @@
     sel: null, key: null, hover: null, hits: [], drag: null, pen: null, anchor: null,
     history: [], idx: -1, savedIdx: -1, lastLabel: null, lastTime: 0, lastGroup: null, groupCounter: 0,
     paint: "fill", expanded: new WeakSet(), spaceHand: false, comparing: false, editing: null,
-    uploadTarget: null, ready: false, relinking: null, svgs: [], importRoot: null,
+    uploadTarget: null, ready: false, relinking: null, svgs: [], importRoot: null, targetLog: {},
   };
 
   function emptyEdits() {
@@ -102,15 +103,28 @@
     if (existing && E.targets[existing]) return existing;
     let tid = existing;
     while (!tid || E.targets[tid]) tid = "t" + Math.random().toString(36).slice(2, 8);
-    E.targets[tid] = { selector: bc.selectorFor(el), fp: bc.fingerprint(el) };
+    // What an element looked like first is kept for good: undo and saving may drop it from E,
+    // and the element has possibly been edited by the time it is needed again.
+    if (!S.targetLog[tid]) S.targetLog[tid] = { selector: bc.selectorFor(el), fp: bc.fingerprint(el) };
+    E.targets[tid] = clone(S.targetLog[tid]);
     bc.bind(tid, el);
     return tid;
   }
 
+  const usedTarget = (tid) => E.styles[tid] || E.meta[tid] || E.text[tid] || E.images[tid] || E.inlineSvg[tid];
+
+  // Every edit must keep its target, or it would be lost on reload with no trace.
+  function restoreMissingTargets() {
+    for (const list of [E.styles, E.meta, E.text, E.images, E.inlineSvg]) {
+      for (const tid of Object.keys(list)) {
+        if (!E.targets[tid] && S.targetLog[tid]) E.targets[tid] = clone(S.targetLog[tid]);
+      }
+    }
+  }
+
   function pruneTargets() {
     for (const tid of Object.keys(E.targets)) {
-      const used = E.styles[tid] || E.meta[tid] || E.text[tid] || E.images[tid] || E.inlineSvg[tid];
-      if (!used) delete E.targets[tid];
+      if (!usedTarget(tid)) delete E.targets[tid];
     }
   }
 
@@ -197,13 +211,18 @@
   // Writes each scope's CSS as the difference from the larger screen above it.
   function compile(key) {
     const all = E.styles[key] || {};
+    // Inline elements ignore moves and turns until they become inline-block.
+    const el = bc.elementOf(key);
+    const inline = SCOPES.some((s) => all[s] && all[s].display)
+      || (el && !isSvgRoot(el) && !MOVABLE_INLINE.has(el.tagName) && win.getComputedStyle(el).display === "inline");
     let parentCss = {};
     SCOPES.forEach((scope, i) => {
       const css = metaCss(mergedMeta(key, SCOPES.slice(0, i + 1)));
+      if (inline && (css.translate || css.rotate || css.scale)) css.display = "inline-block";
       const st = all[scope] || {};
       for (const k of COMPILED) delete st[k];
       for (const [k, v] of Object.entries(css)) if (parentCss[k] !== v) st[k] = v;
-      for (const k of Object.keys(parentCss)) if (!(k in css)) st[k] = "none";
+      for (const k of Object.keys(parentCss)) if (!(k in css)) st[k] = k === "display" ? "inline" : "none";
       if (Object.keys(st).length) all[scope] = st;
       else delete all[scope];
       parentCss = css;
@@ -234,7 +253,8 @@
   }
 
   // ---------- history ----------
-  const applyEdits = () => { if (bc) bc.apply(S.comparing ? {} : E, { skipSvg: true }); };
+  const openInlineSvgs = () => new Set(S.svgs.filter((r) => r.kind === "inline").map((r) => r.ref));
+  const applyEdits = () => { if (bc) bc.apply(S.comparing ? {} : E, { leaveSvg: openInlineSvgs() }); };
 
   const svgSnapshot = () => S.svgs.map((r) => ({ ref: r.ref, inner: r.root.innerHTML, viewBox: r.root.getAttribute("viewBox") }));
   const snapshot = () => ({ edits: JSON.stringify(E), svgs: svgSnapshot() });
@@ -330,6 +350,7 @@
     finishPen();
     say("저장 중…");
     const files = collectSvgChanges();
+    restoreMissingTargets();
     pruneTargets();
     try {
       const res = await fetch("/__bc/save", {
@@ -338,6 +359,7 @@
         body: JSON.stringify({ page: S.page, edits: E, svgs: files }),
       });
       if (!res.ok) throw new Error(String(res.status));
+      const result = await res.json();
       for (const rec of S.svgs) {
         rec.baseline = rec.root.innerHTML;
         rec.baselineViewBox = rec.root.getAttribute("viewBox");
@@ -346,7 +368,13 @@
       S.history[S.idx] = { ...S.history[S.idx], ...snapshot() };
       S.savedIdx = S.idx;
       renderTop();
-      say(`저장했습니다. 수정된 페이지는 ${"결과"} 폴더에 있습니다.`);
+      const skipped = result.skipped || [];
+      if (skipped.length) {
+        console.warn("beavercoat: 결과에서 빠진 파일", skipped);
+        say(`저장했습니다. ${skipped.length}개 파일은 ${result.results} 폴더에 넣지 못했습니다: ${skipped[0]}${skipped.length > 1 ? " 외" : ""}`, true);
+      } else {
+        say(`저장했습니다. 수정된 페이지는 ${result.results} 폴더에 있습니다.`);
+      }
       return true;
     } catch (e) {
       say("저장하지 못했습니다. 편집기 서버가 실행 중인지 확인해 주세요.", true);
@@ -396,7 +424,7 @@
         h("h3", {}, kind === "viewer" ? "보기용 HTML을 만들었습니다" : "편집용 압축을 만들었습니다"),
         h("p", {}, "프로젝트 폴더 안 ", h("code", {}, out.path), " 에 있습니다."),
         kind === "viewer" ? h("p", { class: "hint" }, "더블클릭으로 열리며, 서버나 Python이 필요 없습니다.") : h("p", { class: "hint" }, "받는 분은 압축을 풀고 ‘편집기 열기’를 더블클릭하면 됩니다. Python 3이 필요합니다."),
-        warnings.length ? h("div", { class: "warn" }, "파일에 포함되지 않아 인터넷 연결이 필요하거나 빠질 수 있는 항목:", h("ul", {}, ...warnings.map((w) => h("li", {}, w)))) : null,
+        warnings.length ? h("div", { class: "warn" }, "확인이 필요한 항목:", h("ul", {}, ...warnings.map((w) => h("li", {}, w)))) : null,
         h("div", { class: "btns" }, h("button", { class: "primary", onclick: () => d.close() }, "확인")),
       ].filter(Boolean));
       d.showModal();
@@ -435,7 +463,11 @@
   const deviceWidth = () => {
     const bp = E.breakpoints || { tablet: 1024, mobile: 767 };
     if (S.device === "mobile") return Math.min(DEVICES.mobile, bp.mobile);
-    if (S.device === "tablet") return Math.min(DEVICES.tablet, bp.tablet);
+    if (S.device === "tablet") {
+      // The tablet preview must sit above the mobile limit, or mobile rules would apply to it too.
+      const width = Math.min(DEVICES.tablet, bp.tablet);
+      return width > bp.mobile ? width : Math.min(bp.tablet, bp.mobile + 128);
+    }
     return Math.max(DEVICES.desktop, bp.tablet + 1);
   };
 
@@ -534,9 +566,11 @@
     if (E.images[key]) { say("교체한 이미지는 펼칠 수 없습니다.", true); return null; }
     let rec;
     if (isSvgRoot(el)) {
+      // A saved version may already be showing, so ask for the page's own contents.
+      const original = bc.originalSvg(key) ?? el.innerHTML;
       el.setAttribute("data-bc-open", "");
       ensureIds(el);
-      rec = { kind: "inline", ref: key, root: el, origInner: null };
+      rec = { kind: "inline", ref: key, root: el, origInner: original };
     } else {
       const path = fileSvgPath(el);
       if (!path) return null;
@@ -554,6 +588,7 @@
       const source = parsed.documentElement;
       const rootAttrs = {};
       for (const a of source.attributes) if (a.name !== "viewBox") rootAttrs[a.name] = a.value;
+      scopeSvgClasses(source, path);
       const root = doc.importNode(source, true);
       for (const a of ["style", "class", "id", "alt"]) {
         if (el.hasAttribute(a) && a !== "alt") root.setAttribute(a, el.getAttribute(a));
@@ -580,27 +615,73 @@
     return rec.root;
   }
 
+  async function originalSvgFile(rec) {
+    const res = await fetch("/" + rec.ref.split("/").map(encodeURIComponent).join("/") + "?bc-original=1", { cache: "no-store" });
+    const source = new DOMParser().parseFromString(await res.text(), "image/svg+xml").documentElement;
+    scopeSvgClasses(source, rec.ref);
+    return { inner: source.innerHTML, viewBox: source.getAttribute("viewBox") };
+  }
+
   async function resetSvg(root) {
     const rec = svgRecord(root);
     if (!rec) return;
-    let inner, viewBox = root.getAttribute("viewBox");
+    let inner = rec.origInner, viewBox = root.getAttribute("viewBox");
     if (rec.kind === "file") {
-      const res = await fetch("/" + rec.ref.split("/").map(encodeURIComponent).join("/") + "?bc-original=1", { cache: "no-store" });
-      const parsed = new DOMParser().parseFromString(await res.text(), "image/svg+xml");
-      inner = parsed.documentElement.innerHTML;
-      viewBox = parsed.documentElement.getAttribute("viewBox") || viewBox;
-    } else {
-      delete E.inlineSvg[rec.ref];
-      bc.apply(E);
-      inner = root.innerHTML;
+      const original = await originalSvgFile(rec);
+      inner = original.inner;
+      viewBox = original.viewBox || viewBox;
     }
     mutate("SVG 원본으로", () => {
+      if (rec.kind === "inline") delete E.inlineSvg[rec.ref];
       root.innerHTML = inner;
       if (viewBox) root.setAttribute("viewBox", viewBox);
       ensureIds(root);
       rec.resetInner = root.innerHTML;
     }, { compile: false });
     select(root);
+  }
+
+  // A file SVG's <style> becomes part of the page once opened. Illustrator names classes .cls-1 in
+  // every file, so each file's classes get a prefix of their own and can't affect one another.
+  function scopeSvgClasses(root, ref) {
+    const styles = [...root.querySelectorAll("style")];
+    if (!styles.length) return;
+    let hash = 0;
+    for (const ch of ref) hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
+    const prefix = `bc${hash.toString(36)}-`;
+    const names = new Set();
+    for (const style of styles) {
+      style.textContent = style.textContent.replace(/([^{}]+)\{/g, (rule, selector) => {
+        if (/^\s*@/.test(selector)) return rule;
+        return selector.replace(/\.(-?[A-Za-z_][\w-]*)/g, (whole, name) => {
+          if (name.startsWith(prefix)) return whole;
+          names.add(name);
+          return `.${prefix}${name}`;
+        }) + "{";
+      });
+    }
+    for (const el of root.querySelectorAll("[class]")) {
+      el.setAttribute("class", el.getAttribute("class").split(/\s+/).map((c) => (names.has(c) ? prefix + c : c)).join(" "));
+    }
+  }
+
+  const PAINT_PROPS = new Set(["fill", "stroke", "stroke-width", "stroke-linecap", "stroke-dasharray", "opacity"]);
+
+  // A CSS rule beats an attribute, so where one is in the way the value also goes in the style.
+  function setSvgProp(el, name, value) {
+    if (value == null) {
+      el.removeAttribute(name);
+      if (PAINT_PROPS.has(name)) el.style.removeProperty(name);
+    } else {
+      el.setAttribute(name, value);
+      if (PAINT_PROPS.has(name)) {
+        const cs = win.getComputedStyle(el);
+        const withAttribute = cs.getPropertyValue(name);
+        el.style.setProperty(name, String(value));
+        if (cs.getPropertyValue(name) === withAttribute) el.style.removeProperty(name);
+      }
+    }
+    if (el.getAttribute("style") === "") el.removeAttribute("style");
   }
 
   async function importSvg(root, file) {
@@ -613,6 +694,7 @@
       return;
     }
     const vb = source.getAttribute("viewBox") || (source.getAttribute("width") ? `0 0 ${parseFloat(source.getAttribute("width"))} ${parseFloat(source.getAttribute("height"))}` : null);
+    scopeSvgClasses(source, String(rec.ref));
     mutate("SVG 가져오기", () => {
       if (rec.kind === "inline" && vb && vb !== root.getAttribute("viewBox")) {
         // Inline edits store only the inside, so a different canvas size stays in a nested SVG.
@@ -805,7 +887,7 @@
     setSvgGradEnds(def, p1, p2);
     writeSvgStops(def, [{ c: "#C98A4B", a: 1, p: 0 }, { c: "#F4E3CF", a: 1, p: 100 }]);
     svgDefs(rootSvgOf(el)).append(def);
-    el.setAttribute(paint, `url(#${def.id})`);
+    setSvgProp(el, paint, `url(#${def.id})`);
     return def;
   }
   function defaultGrad(el) {
@@ -1380,7 +1462,8 @@
     if (owner && owner !== tid && E.targets[owner]) { say("이 요소에는 이미 다른 편집이 있습니다. 다른 요소를 골라 주세요.", true); return; }
     cancelRelink();
     mutate("다시 연결", () => {
-      E.targets[tid] = { selector: bc.selectorFor(el), fp: bc.fingerprint(el) };
+      S.targetLog[tid] = { selector: bc.selectorFor(el), fp: bc.fingerprint(el) };
+      E.targets[tid] = clone(S.targetLog[tid]);
       bc.bind(tid, el);
     }, { compile: false });
     select(el);
@@ -1681,7 +1764,7 @@
     const tag = el.tagName;
     const attr = (n, d = "") => el.getAttribute(n) ?? d;
     const cs = win.getComputedStyle(el);
-    const set = (n, v) => (v == null ? el.removeAttribute(n) : el.setAttribute(n, v));
+    const set = (n, v) => setSvgProp(el, n, v);
     const mut = (label, fn) => mutate(label, fn, { compile: false });
 
     const m = matrixOf(el);
@@ -2055,23 +2138,18 @@
     const originals = [];
     for (const rec of S.svgs) {
       if (rec.kind === "file") {
-        const res = await fetch("/" + rec.ref.split("/").map(encodeURIComponent).join("/") + "?bc-original=1", { cache: "no-store" });
-        const parsed = new DOMParser().parseFromString(await res.text(), "image/svg+xml");
-        originals.push({ rec, inner: parsed.documentElement.innerHTML, vb: parsed.documentElement.getAttribute("viewBox") });
+        const original = await originalSvgFile(rec);
+        originals.push({ rec, inner: original.inner, vb: original.viewBox });
       }
     }
     const bp = E.breakpoints;
-    const inlineOriginal = () => {
-      const edits = emptyEdits();
-      bc.apply(edits); // Restores text, images and inline SVGs to the originals.
-      return edits;
-    };
     mutate("전체 초기화", () => {
-      E = inlineOriginal();
+      E = emptyEdits();
       E.breakpoints = bp;
       for (const rec of S.svgs) {
         const o = originals.find((x) => x.rec === rec);
         if (o) { rec.root.innerHTML = o.inner; if (o.vb) rec.root.setAttribute("viewBox", o.vb); }
+        else if (rec.kind === "inline") rec.root.innerHTML = rec.origInner;
         ensureIds(rec.root);
         rec.resetInner = rec.root.innerHTML;
       }
@@ -2139,6 +2217,7 @@
     doc.addEventListener("click", (e) => e.preventDefault(), true);
     E = { ...emptyEdits(), ...clone(state.edits) };
     bc.apply(E);
+    S.targetLog = clone(E.targets);
     if (!E.breakpoints) E.breakpoints = detectBreakpoints();
     fitZoom();
     S.history = [{ label: "시작", ...snapshot() }];
