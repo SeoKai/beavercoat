@@ -631,6 +631,13 @@ class FontTest(ServerTest):
         self.assertEqual(face["format"], "truetype")
         self.assertTrue(face["src"].endswith(".ttf"))
 
+    def test_fonts_with_the_same_file_name_both_stay(self):
+        upload = lambda body: json.loads(self.post("/__bc/font-upload?name=Mine.ttf", body, raw=True)[1])["id"]
+        first, second = upload(b"\x00\x01\x00\x00regular"), upload(b"\x00\x01\x00\x00bold")
+        self.assertEqual(upload(b"\x00\x01\x00\x00regular"), first)
+        families = {f["id"]: f["family"] for f in self.listed() if f["group"] == "내 글꼴"}
+        self.assertEqual(families, {first: "Mine", second: "Mine 2"})
+
     def test_file_that_is_not_a_font_is_refused(self):
         status, _ = self.post("/__bc/font-upload?name=a.ttf", b"<html>not a font</html>", raw=True)
         self.assertEqual(status, 400)

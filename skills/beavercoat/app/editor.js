@@ -2187,9 +2187,23 @@
     const lost = m.tx || m.ty ? hiddenBy(el) : null;
     if (lost) {
       const back = () => { mutate("원래 자리로", () => withMeta(k, (w) => { delete w.tx; delete w.ty; })); renderProps(); };
+      // A box that scrolls (a nav bar on a phone, say) keeps scrolling on the smaller screens:
+      // only this screen and the larger ones stop clipping.
       const unclip = () => {
+        const ccs = win.getComputedStyle(lost.clip);
+        const scrolls = [ccs.overflowX, ccs.overflowY].some((v) => v === "auto" || v === "scroll");
+        const keep = { "overflow-x": ccs.overflowX, "overflow-y": ccs.overflowY };
         const ck = ensureTarget(lost.clip);
-        mutate("잘리지 않게", () => setStyle(ck, "overflow", "visible"), { compile: false });
+        mutate("잘리지 않게", () => {
+          const scope = scopeFor(E.styles[ck], ["overflow"]);
+          setStyle(ck, "overflow", "visible");
+          if (!scrolls) return;
+          for (const smaller of SCOPES.slice(SCOPES.indexOf(scope) + 1)) {
+            const st = (E.styles[ck][smaller] = E.styles[ck][smaller] || {});
+            if (!("overflow" in st || "overflow-x" in st || "overflow-y" in st)) Object.assign(st, keep);
+          }
+        }, { compile: false });
+        if (scrolls && writeScope() !== "mobile") say("이 화면보다 작은 화면에서는 원래처럼 스크롤되어, 그곳에서는 계속 잘려 보일 수 있습니다.");
         renderProps();
       };
       box.append(h("div", { class: "group" }, h("div", { class: "warn" },
@@ -2198,7 +2212,7 @@
           : `‘${nameOf(lost.cover)}’ 아래에 가려 보이지 않습니다.`,
         h("div", { class: "btns" },
           h("button", { onclick: back }, "원래 자리로"),
-          lost.clip ? h("button", { title: "그 상자가 넘치는 내용을 잘라 내지 않게 합니다. 좁은 화면에서 내용이 상자 밖으로 넘쳐 보일 수 있습니다.", onclick: unclip }, "잘리지 않게") : null))));
+          lost.clip ? h("button", { title: "그 상자가 넘치는 내용을 잘라 내지 않게 합니다. 스크롤되는 상자라면 더 작은 화면에서는 원래처럼 스크롤됩니다.", onclick: unclip }, "잘리지 않게") : null))));
     }
 
     const textBox = isTextBox(el);

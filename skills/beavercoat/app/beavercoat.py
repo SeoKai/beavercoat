@@ -314,11 +314,18 @@ def add_custom_font(file_name, body):
     if not ext:
         return None
     digest = hashlib.sha256(body).hexdigest()[:16]
-    family = font_family_name(file_name)
     write_atomic(os.path.join(font_store(), "custom", f"{digest}.{ext}"), body)
-    fonts = {k: v for k, v in custom_fonts().items() if v.get("family") != family}
+    fonts = custom_fonts()
     font_id = f"custom-{digest}"
-    fonts[font_id] = {"family": family, "file": f"{digest}.{ext}"}
+    if font_id not in fonts:
+        # Two files named alike (a regular and a bold, say) both stay, under names of their own.
+        taken = {v.get("family") for v in fonts.values()}
+        base = family = font_family_name(file_name)
+        n = 2
+        while family in taken:
+            family = f"{base} {n}"
+            n += 1
+        fonts[font_id] = {"family": family, "file": f"{digest}.{ext}"}
     write_atomic(os.path.join(font_store(), "custom.json"), json.dumps(fonts, ensure_ascii=False, indent=1).encode("utf-8"))
     return font_id
 
