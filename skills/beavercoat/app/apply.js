@@ -6,6 +6,7 @@
   const resolved = new Map(); // target id -> element
   let orphans = [];
   let styleEl = null;
+  let fontEl = null;
 
   const normalize = (s) => String(s || "").replace(/\s+/g, " ").trim();
   const srcName = (el) => {
@@ -181,6 +182,22 @@
     return waiting;
   }
 
+  // Everything here comes from a file that may have been received from someone else, so only known shapes pass.
+  function fontCss(edits) {
+    const rules = [];
+    const formats = new Set(["woff2", "woff", "truetype", "opentype"]);
+    for (const [family, faces] of Object.entries(edits.fonts || {})) {
+      if (!Array.isArray(faces) || /["\\<>{};\n\r]/.test(family)) continue;
+      for (const face of faces) {
+        if (!face || !/^(?:upload:[\w.-]+|data:[\w/+.-]+;base64,[A-Za-z0-9+/=]+)$/.test(face.src || "") || !formats.has(face.format)) continue;
+        const weight = /^\d{1,4}(?: \d{1,4})?$/.test(face.weight || "") ? ` font-weight: ${face.weight};` : "";
+        const range = /^[U+0-9A-Fa-f?, -]+$/.test(face.range || "") ? ` unicode-range: ${face.range};` : "";
+        rules.push(`@font-face { font-family: "${family}"; src: url("${imageUrl(face.src)}") format("${face.format}");${weight}${range} font-display: swap; }`);
+      }
+    }
+    return rules.join("\n");
+  }
+
   function cssFrom(edits) {
     const bp = { ...BP_DEFAULT, ...(edits.breakpoints || {}) };
     const blocks = { base: [], tablet: [], mobile: [] };
@@ -347,6 +364,15 @@
     // Only write on change: this runs from a mutation observer, and a write would trigger it again.
     const css = cssFrom(edits);
     if (styleEl.textContent !== css) styleEl.textContent = css;
+    // Kept apart from the edits: rewriting a font rule makes the browser load the font again, and
+    // until it has, text wraps differently and everything below it jumps.
+    const fonts = fontCss(edits);
+    if (fonts && (!fontEl || !fontEl.isConnected)) {
+      fontEl = document.createElement("style");
+      fontEl.setAttribute("data-bc-fonts", "");
+      styleEl.before(fontEl);
+    }
+    if (fontEl && fontEl.textContent !== fonts) fontEl.textContent = fonts;
     if (!pageReady()) return true;
     const waiting = resolveAll(edits);
     applyImages(edits);

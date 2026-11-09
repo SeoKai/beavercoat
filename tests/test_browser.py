@@ -214,5 +214,40 @@ class ResultFileTest(BrowserCase):
         self.assertIn("<title>CSS1Compat</title>", self.dom(Path(out, "check.html").as_uri()))
 
 
+class FontFaceTest(BrowserCase):
+    def font_status(self, fonts):
+        """What the page's fonts look like after apply.js ran."""
+        self.page('<!doctype html><html><head></head><body><h1>글</h1><script>document.addEventListener("DOMContentLoaded",()=>{'
+                  'document.title=[...document.fonts].map(f=>f.family).join("|")||"none"})</script></body></html>')
+        self.edit({"selector": "h1", "fp": {"tag": "h1", "text": "글", "path": "h1", "cls": ""}},
+                  styles={"t1": {"base": {"font-family": '"Good", serif'}}}, fonts=fonts)
+        return self.dom(self.base + "p.html")
+
+    def test_font_face_is_added_for_a_valid_font(self):
+        dom = self.font_status({"Good": [{"src": "upload:a1.woff2", "format": "woff2", "weight": "400", "range": ""}]})
+        self.assertIn('font-family: "Good"', dom)
+        self.assertIn("/a1.woff2", dom)
+
+    def test_font_rules_stay_apart_from_edit_rules(self):
+        dom = self.font_status({"Good": [{"src": "upload:a1.woff2", "format": "woff2", "weight": "400", "range": ""}]})
+        edits_css = re.search(r"<style data-bc-styles[^>]*>(.*?)</style>", dom, re.S).group(1)
+        self.assertNotIn("@font-face", edits_css)
+
+    def test_received_file_cannot_add_rules_through_font_fields(self):
+        dom = self.font_status({
+            'x"}body{display:none}': [{"src": "upload:a.woff2", "format": "woff2"}],
+            "Bad": [
+                {"src": 'upload:a"){}body{display:none}', "format": "woff2"},
+                {"src": "https://evil.test/track.woff2", "format": "woff2"},
+                {"src": "upload:ok.woff2", "format": "woff2\"){}body{display:none}"},
+                {"src": "upload:ok.woff2", "format": "woff2", "weight": "400;}body{display:none}", "range": "U+0;}body{display:none}"},
+            ],
+        })
+        css = re.search(r"<style data-bc-fonts[^>]*>(.*?)</style>", dom, re.S).group(1)
+        self.assertNotIn("display:none", css)
+        self.assertNotIn("evil.test", css)
+        self.assertEqual(css.count("@font-face"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

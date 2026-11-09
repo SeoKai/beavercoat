@@ -1,0 +1,367 @@
+[
+ {
+  "id": "pretendard",
+  "family": "Pretendard",
+  "group": "한글 고딕",
+  "fallback": "sans-serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/woff2/PretendardVariable.woff2",
+    "sha256": "9599f12fd42fc0bce1cd50b47a0c022e108d7aa64dd0d1bb0ed44f3282d900b4",
+    "size": 2057688,
+    "weight": "45 920",
+    "range": ""
+   }
+  ]
+ },
+ {
+  "id": "noto-sans-kr",
+  "family": "Noto Sans KR",
+  "group": "한글 고딕",
+  "fallback": "sans-serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-korean-300-normal.woff2",
+    "sha256": "ba50f7a4aa7aac8147e9b5949fcc76ff388426eea6741b66492a93ba1d4b5070",
+    "size": 511048,
+    "weight": "300",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-latin-300-normal.woff2",
+    "sha256": "c45bcb734c6116ab7c8b91c8fe822804a6a5e3a63b29aa2016cdb97d473e075e",
+    "size": 13688,
+    "weight": "300",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-korean-400-normal.woff2",
+    "sha256": "809450f0b886d49a453c91a95908834ddff32a1b4ffea610a4a23128002a7296",
+    "size": 542264,
+    "weight": "400",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-latin-400-normal.woff2",
+    "sha256": "d45129ae032c4b94cd598f26d69bd0ce11e72b423a77883f01f481b39e8d3ac1",
+    "size": 13716,
+    "weight": "400",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-korean-500-normal.woff2",
+    "sha256": "7582da7304f1c52801e0d38dbb06cb0cb973ffdff404abb5f817c5153e50cd34",
+    "size": 552280,
+    "weight": "500",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-latin-500-normal.woff2",
+    "sha256": "495759952a91e24984a4f73152a926d2f70827d59e771f264fcef18f5fbd0ecc",
+    "size": 13832,
+    "weight": "500",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-korean-700-normal.woff2",
+    "sha256": "419a46fa75b0c492aa18218ff8c2d36221ad182cfa3db96a535c0e734961228b",
+    "size": 559392,
+    "weight": "700",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-latin-700-normal.woff2",
+    "sha256": "2e07c0443f54ec3e9096dd64274234304bc351f68b2a610013c1841f83734852",
+    "size": 13812,
+    "weight": "700",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "nanum-gothic",
+  "family": "Nanum Gothic",
+  "group": "한글 고딕",
+  "fallback": "sans-serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-gothic@5.3.0/files/nanum-gothic-korean-400-normal.woff2",
+    "sha256": "4a000e3bca1298c43c70dc97447e537a27e0a8c1585f410be57dfeff06d3f713",
+    "size": 340688,
+    "weight": "400",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-gothic@5.3.0/files/nanum-gothic-latin-400-normal.woff2",
+    "sha256": "16004450799ab831eb624c1ab9a39f5c28f3f0fae6581e78faedea63acba49ac",
+    "size": 17472,
+    "weight": "400",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-gothic@5.3.0/files/nanum-gothic-korean-700-normal.woff2",
+    "sha256": "0bd36842cc218a7b0e1c0f5ec796d90152a02e4cd487b2d868f1130708fe551a",
+    "size": 417252,
+    "weight": "700",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-gothic@5.3.0/files/nanum-gothic-latin-700-normal.woff2",
+    "sha256": "0309db8bc9bb224686af9f8a015c610d22e2b7266f4789b4efb68610dd9daeb7",
+    "size": 17824,
+    "weight": "700",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "ibm-plex-sans-kr",
+  "family": "IBM Plex Sans KR",
+  "group": "한글 고딕",
+  "fallback": "sans-serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-korean-300-normal.woff2",
+    "sha256": "886b0adb5ac82590f75def453ebe2076b24e3af1f0659eded9353a1753f48041",
+    "size": 510300,
+    "weight": "300",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-latin-300-normal.woff2",
+    "sha256": "74c6edd7200f525387231400213b422d538d3e95e9a8ba1432340ea3fac16f5b",
+    "size": 16636,
+    "weight": "300",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-korean-400-normal.woff2",
+    "sha256": "e314e0181981858de181984148755444b0bc032874a1096d107a777ad105de5c",
+    "size": 517652,
+    "weight": "400",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-latin-400-normal.woff2",
+    "sha256": "071c7c06a3fe2346fd2f4034c762cd0dc79a5021da100ef14401fc07814b279e",
+    "size": 15112,
+    "weight": "400",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-korean-500-normal.woff2",
+    "sha256": "47a6e47cb8b360d1744807d85873c06b72b5ff812c35a8cdc01f9926905f130b",
+    "size": 562320,
+    "weight": "500",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-latin-500-normal.woff2",
+    "sha256": "52602e90afc905707f689340fdae5f6fa9476df5a308d0f1ac906f4747fcf7df",
+    "size": 16304,
+    "weight": "500",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-korean-700-normal.woff2",
+    "sha256": "08ef18d9aac1bbc7dbf69ddeb793cd8288e77589576cab604176ccbfd224e4f3",
+    "size": 497216,
+    "weight": "700",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-latin-700-normal.woff2",
+    "sha256": "3c498859a3afc136095360f97379858cd0f563729698c0abd951931554216a2f",
+    "size": 15344,
+    "weight": "700",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "noto-serif-kr",
+  "family": "Noto Serif KR",
+  "group": "한글 명조",
+  "fallback": "serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-kr@5.3.1/files/noto-serif-kr-korean-400-normal.woff2",
+    "sha256": "c9a1e3ac69994d680883b53b1fd83d520733b704792522a932bfaa276117de45",
+    "size": 971428,
+    "weight": "400",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-kr@5.3.1/files/noto-serif-kr-latin-400-normal.woff2",
+    "sha256": "b02203d9be35c7fa0457605f78cc0ff861b8330429beffdffa170c68ca702447",
+    "size": 19356,
+    "weight": "400",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-kr@5.3.1/files/noto-serif-kr-korean-700-normal.woff2",
+    "sha256": "504d6af6abb882acd912d47bafa383c4512a6c8c33635e4e8fb37111d9310941",
+    "size": 1033556,
+    "weight": "700",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-kr@5.3.1/files/noto-serif-kr-latin-700-normal.woff2",
+    "sha256": "fb6e6a582960565cc33339659e32b1dea2530b91d9a058fb488a730424a96d3f",
+    "size": 19500,
+    "weight": "700",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "nanum-myeongjo",
+  "family": "Nanum Myeongjo",
+  "group": "한글 명조",
+  "fallback": "serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-myeongjo@5.3.0/files/nanum-myeongjo-korean-400-normal.woff2",
+    "sha256": "561e9193a6e848b3f7ce9f8f5907310a13e175bc9d69e77da2842a7517a97c16",
+    "size": 502068,
+    "weight": "400",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-myeongjo@5.3.0/files/nanum-myeongjo-latin-400-normal.woff2",
+    "sha256": "e1c889a6e7588ddcbea36e306b593d2098214028229fa3d82e0df6ec6469d1f3",
+    "size": 21304,
+    "weight": "400",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-myeongjo@5.3.0/files/nanum-myeongjo-korean-700-normal.woff2",
+    "sha256": "f2c95c35d72782f71cb60e3cc537c461ae3f5ee7e7504db9653ba7a7024dd548",
+    "size": 575580,
+    "weight": "700",
+    "range": ""
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-myeongjo@5.3.0/files/nanum-myeongjo-latin-700-normal.woff2",
+    "sha256": "84a60324a3b8f916547358b0a0e07e80b5826f2890f0df4b29f744dda135230a",
+    "size": 21024,
+    "weight": "700",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "inter",
+  "family": "Inter",
+  "group": "영문",
+  "fallback": "sans-serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/inter@5.3.0/files/inter-latin-wght-normal.woff2",
+    "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+    "size": 48256,
+    "weight": "100 900",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "roboto",
+  "family": "Roboto",
+  "group": "영문",
+  "fallback": "sans-serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/roboto@5.3.0/files/roboto-latin-wght-normal.woff2",
+    "sha256": "1404ca348bd75ef836f4dd8b6f2cc719458642d1237c368296b2fc652dca47dc",
+    "size": 43136,
+    "weight": "100 900",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "montserrat",
+  "family": "Montserrat",
+  "group": "영문",
+  "fallback": "sans-serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/montserrat@5.3.0/files/montserrat-latin-wght-normal.woff2",
+    "sha256": "06b16db7a969135d48d38c49183be7fb88d4452e2a3011957c7851941f4e4879",
+    "size": 37956,
+    "weight": "100 900",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "poppins",
+  "family": "Poppins",
+  "group": "영문",
+  "fallback": "sans-serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.3.0/files/poppins-latin-300-normal.woff2",
+    "sha256": "78bc3aa78faec288bbb3bf26c9a0fa4eb67b1e69da94a17233c5cab60525efdb",
+    "size": 7840,
+    "weight": "300",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.3.0/files/poppins-latin-400-normal.woff2",
+    "sha256": "7d93459d86585bfcdbb7e0376056226adb25821ee54b96236fe2123e9560929f",
+    "size": 7884,
+    "weight": "400",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.3.0/files/poppins-latin-500-normal.woff2",
+    "sha256": "cd36de204aca2d5fa263a731f7c20009b5e3d754ba1f1e03c33e93a48f3e7446",
+    "size": 7748,
+    "weight": "500",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.3.0/files/poppins-latin-600-normal.woff2",
+    "sha256": "f4e80d9dfd374d02989b87a27b5ed4cb78fbb177c27f1478e9a8b0afb7513149",
+    "size": 8000,
+    "weight": "600",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   },
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.3.0/files/poppins-latin-700-normal.woff2",
+    "sha256": "9338e65fc077355c7a87ae0d64cc101e23b9bf8ad78ae65f0f319c857311b526",
+    "size": 7816,
+    "weight": "700",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ },
+ {
+  "id": "playfair-display",
+  "family": "Playfair Display",
+  "group": "영문",
+  "fallback": "serif",
+  "license": "OFL-1.1",
+  "files": [
+   {
+    "url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/playfair-display@5.3.0/files/playfair-display-latin-wght-normal.woff2",
+    "sha256": "e0c764a8e9e1cce92163c55bac4b2ad6cd4cf8c696ce2289ab5c41565e65b7e2",
+    "size": 38404,
+    "weight": "400 900",
+    "range": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+   }
+  ]
+ }
+]

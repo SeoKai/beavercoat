@@ -45,14 +45,17 @@ TOOL_DIRS = {EDITS_DIR, BUNDLED_APP_DIR, ".git", ".claude", "node_modules", "__p
 PRIVATE_EXTS = (".pem", ".key", ".p12", ".pfx")
 PRIVATE_NAMES = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
 SKIP_FILES = {".DS_Store", "Thumbs.db"}
-APP_FILES = {"editor.html", "editor.js", "apply.js"}
+APP_FILES = {"editor.html", "editor.js", "apply.js", "fonts.json"}
+FONT_STORE_ENV = "BEAVERCOAT_FONT_DIR"
+FONT_FORMATS = {"woff2": "woff2", "woff": "woff", "ttf": "truetype", "otf": "opentype"}
+FONT_MAGIC = {b"wOF2": "woff2", b"wOFF": "woff", b"OTTO": "otf", b"\x00\x01\x00\x00": "ttf", b"true": "ttf"}
 IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "gif", "avif", "svg"}
 MAX_SAVE_BYTES = 20 * 1024 * 1024
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 HTML_EXTS = (".html", ".htm")
 EMPTY_EDITS = {
     "version": 2, "targets": {}, "styles": {}, "meta": {}, "text": {}, "images": {},
-    "inlineSvg": {}, "breakpoints": None,
+    "inlineSvg": {}, "fonts": {}, "breakpoints": None,
 }
 
 
@@ -228,7 +231,7 @@ class Project:
             return json.loads(json.dumps(EMPTY_EDITS))
         problem = not isinstance(data, dict)
         if not problem:
-            problem = any(not isinstance(data.get(k, {}), dict) for k in ("targets", "styles", "meta", "text", "images", "inlineSvg"))
+            problem = any(not isinstance(data.get(k, {}), dict) for k in ("targets", "styles", "meta", "text", "images", "inlineSvg", "fonts"))
         if not problem:
             problem = any(not isinstance(v, str) for v in data.get("images", {}).values())
         if problem:
@@ -248,6 +251,151 @@ class Project:
 
     def upload_file(self, name):
         return self.path(EDITS_DIR, "uploads", os.path.basename(name))
+
+
+# ---------- fonts ----------
+
+def font_store():
+    """Fonts kept on this computer, so other projects don't have to get them again."""
+    return os.environ.get(FONT_STORE_ENV) or os.path.join(os.path.expanduser("~"), ".beavercoat", "fonts")
+
+
+def font_catalog():
+    try:
+        with open(os.path.join(APP_DIR, "fonts.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def catalog_font(font_id):
+    return next((font for font in font_catalog() if font["id"] == font_id), None)
+
+
+def catalog_file(font, entry):
+    return os.path.join(font_store(), font["id"], os.path.basename(entry["url"]))
+
+
+def custom_fonts():
+    try:
+        with open(os.path.join(font_store(), "custom.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def font_list():
+    """What the editor shows: the catalog with what's already here, then fonts the user added."""
+    listed = []
+    for font in font_catalog():
+        installed = all(
+            os.path.isfile(catalog_file(font, e)) and os.path.getsize(catalog_file(font, e)) == e["size"]
+            for e in font["files"]
+        )
+        listed.append({
+            "id": font["id"], "family": font["family"], "group": font["group"], "installed": installed,
+            "size": sum(e["size"] for e in font["files"]), "urls": [e["url"] for e in font["files"]],
+        })
+    for font_id, font in sorted(custom_fonts().items(), key=lambda item: item[1].get("family", "")):
+        listed.append({"id": font_id, "family": font.get("family", ""), "group": "내 글꼴", "installed": True, "size": 0, "urls": []})
+    return listed
+
+
+def font_family_name(file_name):
+    """A name usable in CSS, from the name of a file someone added."""
+    stem = os.path.splitext(os.path.basename(nfc(file_name).replace("\\", "/")))[0]
+    return re.sub(r'[\x00-\x1f"\\<>{};]', "", stem).strip()[:60] or "내 글꼴"
+
+
+def add_custom_font(file_name, body):
+    """Keep a font someone added. Returns its id, or None if the file isn't a font."""
+    ext = FONT_MAGIC.get(body[:4])
+    if not ext:
+        return None
+    digest = hashlib.sha256(body).hexdigest()[:16]
+    family = font_family_name(file_name)
+    write_atomic(os.path.join(font_store(), "custom", f"{digest}.{ext}"), body)
+    fonts = {k: v for k, v in custom_fonts().items() if v.get("family") != family}
+    font_id = f"custom-{digest}"
+    fonts[font_id] = {"family": family, "file": f"{digest}.{ext}"}
+    write_atomic(os.path.join(font_store(), "custom.json"), json.dumps(fonts, ensure_ascii=False, indent=1).encode("utf-8"))
+    return font_id
+
+
+def project_font_file(project, body, ext):
+    """Copy a font in with the project's uploads. Named by its contents, like images."""
+    name = f"{hashlib.sha256(body).hexdigest()[:16]}.{ext}"
+    if not os.path.isfile(project.upload_file(name)):
+        write_atomic(project.upload_file(name), body)
+    return f"upload:{name}"
+
+
+def use_font(project, font_id):
+    """Put a font into the project. Returns what the page needs, or None if it isn't available here."""
+    font = catalog_font(font_id)
+    if font:
+        faces = []
+        for entry in font["files"]:
+            try:
+                with open(catalog_file(font, entry), "rb") as f:
+                    body = f.read()
+            except OSError:
+                return None
+            if hashlib.sha256(body).hexdigest() != entry["sha256"]:
+                os.unlink(catalog_file(font, entry))
+                return None
+            faces.append({"src": project_font_file(project, body, "woff2"), "format": "woff2", "weight": entry["weight"], "range": entry["range"]})
+        return {"family": font["family"], "fallback": font["fallback"], "faces": faces}
+    custom = custom_fonts().get(font_id)
+    if not custom:
+        return None
+    file = os.path.basename(str(custom.get("file", "")))
+    ext = file.rsplit(".", 1)[-1]
+    if ext not in FONT_FORMATS:
+        return None
+    try:
+        with open(os.path.join(font_store(), "custom", file), "rb") as f:
+            body = f.read()
+    except OSError:
+        return None
+    return {
+        "family": custom["family"], "fallback": "sans-serif",
+        "faces": [{"src": project_font_file(project, body, ext), "format": FONT_FORMATS[ext], "weight": "", "range": ""}],
+    }
+
+
+def font_values(edits):
+    """Every font-family an edit sets."""
+    values = []
+    styles = edits.get("styles")
+    for scopes in (styles.values() if isinstance(styles, dict) else []):
+        for props in (scopes.values() if isinstance(scopes, dict) else []):
+            value = props.get("font-family") if isinstance(props, dict) else None
+            if isinstance(value, str):
+                values.append(value)
+    return values
+
+
+def fonts_in_use(edits):
+    """The fonts this page's edits use. A font tried and then changed back doesn't go along."""
+    fonts = edits.get("fonts")
+    values = font_values(edits)
+    if not isinstance(fonts, dict):
+        return {}
+    return {family: faces for family, faces in fonts.items() if any(f'"{family}"' in value for value in values)}
+
+
+def font_faces(edits):
+    fonts = edits.get("fonts")
+    for faces in (fonts.values() if isinstance(fonts, dict) else []):
+        for face in (faces if isinstance(faces, list) else []):
+            if isinstance(face, dict) and isinstance(face.get("src"), str):
+                yield face
+
+
+def font_uploads(edits):
+    return {face["src"][7:] for face in font_faces(edits) if face["src"].startswith("upload:")}
 
 
 def has_edits(edits):
@@ -365,6 +513,7 @@ def build_results(project):
             if has_edits(edits):
                 pages[rel] = edits
                 uploads.update(v[7:] for v in edits["images"].values() if v.startswith("upload:"))
+                uploads.update(font_uploads(edits))
     for upload in uploads:
         if os.path.isfile(project.upload_file(upload)):
             wanted.add(f"beavercoat-assets/{os.path.basename(upload)}")
@@ -432,6 +581,10 @@ def copy_if_changed(src, dest):
 
 mimetypes.add_type("image/avif", ".avif")
 mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("font/woff2", ".woff2")
+mimetypes.add_type("font/woff", ".woff")
+mimetypes.add_type("font/ttf", ".ttf")
+mimetypes.add_type("font/otf", ".otf")
 
 EXTERNAL_RE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:|//)", re.I)
 WEB_URL_RE = re.compile(r"^(?:https?:)?//", re.I)
@@ -662,6 +815,13 @@ def build_viewer(project, page):
                     edits["images"][key] = inliner.data_uri(full)
                 else:
                     inliner.warnings.append(f"넣은 이미지를 찾지 못했습니다: {value[7:]}")
+        for face in font_faces(edits):
+            if face["src"].startswith("upload:"):
+                full = project.upload_file(face["src"][7:])
+                if os.path.isfile(full):
+                    face["src"] = inliner.data_uri(full)
+                else:
+                    inliner.warnings.append(f"넣은 글꼴을 찾지 못했습니다: {face['src'][7:]}")
         snippet = edits_snippet(edits, "") + f"<script>{apply_source()}</script>"
     html = page_with_snippet(html, snippet)
     # Folder names stay in the file name, or a/index.html and b/index.html would overwrite each other.
@@ -704,7 +864,7 @@ Python 3이 필요합니다. 없다면 https://www.python.org/downloads/ 에서 
 .design-edits/ 저장된 편집 내용 (Mac에서는 숨김 폴더로 보입니다)
 
 수정한 뒤에는 "저장"을 누르고 폴더 전체를 다시 압축해 보내 주세요.
-이 프로그램은 내 컴퓨터 안에서만 동작합니다.
+이 프로그램은 내 컴퓨터 안에서만 동작합니다. 글꼴을 받을 때만 인터넷을 사용합니다.
 """
 
 
@@ -714,6 +874,18 @@ def zip_time(full):
     if stamp[0] < 1980:
         return (1980, 1, 1, 0, 0, 0)
     return (2107, 12, 31, 23, 59, 58) if stamp[0] > 2107 else stamp
+
+
+def zip_fonts(project, sources):
+    """Font files some page uses. None means a page couldn't be read, so nothing should be left out."""
+    used = set()
+    for rel in sources:
+        if rel.lower().endswith(HTML_EXTS):
+            try:
+                used |= font_uploads(project.load_edits(rel))
+            except ValueError:
+                return None
+    return used
 
 
 def build_zip(project):
@@ -749,10 +921,14 @@ def build_zip(project):
             sources = project.walk_files()
             for rel in sources:
                 add_project_file(z, project.path(*rel.split("/")), rel)
+            fonts_kept = zip_fonts(project, sources)
+            uploads_dir = project.path(EDITS_DIR, "uploads")
             for base, _, files in os.walk(project.path(EDITS_DIR)):
                 for name in sorted(files):
                     full = os.path.join(base, name)
                     if name in SKIP_FILES or name.endswith(".tmp") or os.path.islink(full):
+                        continue
+                    if fonts_kept is not None and base == uploads_dir and name.rsplit(".", 1)[-1] in FONT_FORMATS and name not in fonts_kept:
                         continue
                     add_project_file(z, full, os.path.relpath(full, project.root).replace(os.sep, "/"))
             # Only what this tool generated: anything else someone put in that folder stays private.
@@ -867,8 +1043,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _app_get(self, name, query):
         if name in APP_FILES:
-            types = {"html": "text/html", "js": "text/javascript"}
+            types = {"html": "text/html", "js": "text/javascript", "json": "application/json"}
             return self._serve_file(os.path.join(APP_DIR, name), types[name.rsplit(".", 1)[1]] + "; charset=utf-8")
+        if name == "fonts":
+            return self._json(200, {"fonts": font_list()})
         if name == "state":
             pages = self.project.pages()
             page = query.get("page", [self.project.default_page()])[0]
@@ -890,7 +1068,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
             return self.send_error(411, "Length required")
-        limit = MAX_UPLOAD_BYTES if url.path == "/__bc/upload" else MAX_SAVE_BYTES
+        limit = MAX_UPLOAD_BYTES if url.path in ("/__bc/upload", "/__bc/font-file", "/__bc/font-upload") else MAX_SAVE_BYTES
         if length <= 0 or length > limit:
             return self.send_error(413, "Too large")
         body = self.rfile.read(length)
@@ -901,6 +1079,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._upload(body, urllib.parse.parse_qs(url.query))
             if url.path == "/__bc/export":
                 return self._export(body)
+            if url.path == "/__bc/font-file":
+                return self._font_file(body, urllib.parse.parse_qs(url.query))
+            if url.path == "/__bc/font-upload":
+                return self._font_upload(body, urllib.parse.parse_qs(url.query))
+            if url.path == "/__bc/font-use":
+                return self._font_use(body)
         except (OSError, ValueError) as e:
             return self._json(500, {"error": str(e)})
         return self.send_error(404, "Not found")
@@ -933,6 +1117,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if not root.tag.endswith("svg"):
                     return self._json(400, {"error": f"invalid svg: {rel}"})
             planned.append((rel, text))
+        edits["fonts"] = fonts_in_use(edits)
         write_atomic(self.project.edits_file(page), json.dumps(edits, ensure_ascii=False, indent=1).encode("utf-8"))
         for rel, text in planned:
             override = self.project.svg_override(rel)
@@ -951,6 +1136,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         name = f"{hashlib.sha256(body).hexdigest()[:16]}.{ext}"
         write_atomic(self.project.upload_file(name), body)
         self._json(200, {"value": f"upload:{name}"})
+
+    def _font_file(self, body, query):
+        """Keep one file of a listed font. The browser fetched it; the hash decides if it's the right one."""
+        font = catalog_font(query.get("id", [""])[0])
+        try:
+            index = int(query.get("index", [""])[0])
+            if index < 0:
+                raise IndexError(index)
+            entry = font["files"][index]
+        except (TypeError, ValueError, IndexError):
+            return self._json(400, {"error": "unknown font file"})
+        if hashlib.sha256(body).hexdigest() != entry["sha256"]:
+            return self._json(400, {"error": "font file does not match"})
+        write_atomic(catalog_file(font, entry), body)
+        self._json(200, {"ok": True})
+
+    def _font_upload(self, body, query):
+        font_id = add_custom_font(query.get("name", [""])[0], body)
+        if not font_id:
+            return self._json(400, {"error": "not a font"})
+        self._json(200, {"id": font_id})
+
+    def _font_use(self, body):
+        try:
+            font_id = json.loads(body)["id"]
+        except (ValueError, KeyError, TypeError):
+            return self._json(400, {"error": "invalid payload"})
+        font = use_font(self.project, font_id)
+        if not font:
+            return self._json(404, {"error": "font not available"})
+        self._json(200, font)
 
     def _export(self, body):
         try:

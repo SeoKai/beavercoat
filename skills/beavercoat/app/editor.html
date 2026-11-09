@@ -36,6 +36,14 @@ input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid var
 #tools { grid-column: 1; grid-row: 2; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0; overflow-y: auto; }
 #tools button { width: 34px; height: 34px; padding: 0; min-height: 0; font-size: 15px; background: none; border-color: transparent; flex: 0 0 auto; }
 #tools button.on { background: var(--accent); }
+#tools button .ic { width: 20px; height: 20px; }
+.ic { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+button.icon { display: inline-flex; align-items: center; justify-content: center; padding: 0; width: 30px; }
+.seg button.icon { width: auto; }
+.btns.tight { gap: 3px; }
+.btns.tight button.icon { width: 28px; }
+.btns .split { width: 1px; align-self: stretch; margin: 2px; background: var(--line); }
+.layer .eye .ic { width: 15px; height: 15px; margin: 0 auto; }
 #tools button:hover:not(.on) { background: var(--panel2); }
 
 #canvas { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; position: relative; overflow: hidden; background: #111413; }
@@ -58,11 +66,28 @@ input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid var
 
 .group { border-bottom: 1px solid #1D2221; padding: 9px 11px; }
 .group > h3 { margin: 0 0 7px; font-size: 12px; font-weight: 700; color: var(--text); word-break: break-all; }
+.group[data-title] > h3 { cursor: pointer; user-select: none; }
+.group[data-title] > h3::before { content: "▾"; display: inline-block; width: 13px; color: var(--muted); }
+.group.closed > h3 { margin-bottom: 0; }
+.group.closed > h3::before { content: "▸"; }
+.group.closed > :not(h3) { display: none !important; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.dim { opacity: .45; }
+.fontlist { max-height: 136px; overflow-y: auto; margin-top: 6px; background: #1D2221; border: 1px solid var(--line); border-radius: 4px; }
+.fontgroup { padding: 5px 7px 2px; color: var(--muted); font-size: 11px; }
+.fontrow { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 26px; padding: 2px 7px; background: none; border: 0; border-radius: 0; text-align: left; }
+.fontrow:hover:not(:disabled) { background: var(--panel2); }
+.fontrow.on { background: #24466F; }
+.fontrow .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fontrow .fsize { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.fontrow .fact { flex: 0 0 18px; text-align: center; color: var(--accent); font-weight: 700; }
 .field { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 7px; margin-top: 5px; color: var(--muted); }
 .field .ctl { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .field .val { flex: 0 0 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.seg { display: flex; flex: 1; min-width: 0; gap: 1px; }
+.seg button { flex: 1; min-width: 0; padding-left: 2px; padding-right: 2px; white-space: nowrap; }
 .hint { color: var(--muted); margin: 5px 0 0; }
 .warn { background: #4A3512; border: 1px solid #8A6A2A; color: #FFE7BF; border-radius: 6px; padding: 7px 9px; margin-top: 6px; }
 .stop { background: var(--panel2); border-radius: 6px; padding: 5px 8px 8px; margin-top: 6px; }
@@ -97,8 +122,8 @@ dialog code { word-break: break-all; }
   <span class="title">🦫 beavercoat</span>
   <select id="page" title="편집할 페이지"></select>
   <button id="save" class="primary" title="저장 (⌘S)">저장</button>
-  <button id="undo" title="되돌리기 (⌘Z)">되돌리기</button>
-  <button id="redo" title="다시 실행 (⌘⇧Z)">다시 실행</button>
+  <button id="undo" class="icon" title="되돌리기 (⌘Z)" aria-label="되돌리기"></button>
+  <button id="redo" class="icon" title="다시 실행 (⌘⇧Z)" aria-label="다시 실행"></button>
   <span class="sep"></span>
   <select id="device" title="미리 보는 화면 크기">
     <option value="desktop">데스크톱</option>

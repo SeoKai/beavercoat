@@ -1,5 +1,6 @@
 """Server and export tests. Standard library only: python3 -m unittest discover tests"""
 import base64
+import hashlib
 import http.client
 import importlib.util
 import json
@@ -11,6 +12,7 @@ import tempfile
 import threading
 import unicodedata
 import unittest
+import urllib.parse
 import warnings
 import zipfile
 from pathlib import Path
@@ -550,6 +552,115 @@ class SmallFixesTest(ProjectCase):
 
     def test_uppercase_script_end_cannot_break_out(self):
         self.assertNotIn("</SCRIPT", bc.escape_inline_js("a='</SCRIPT>'"))
+
+
+class FontTest(ServerTest):
+    BODY = b"wOF2" + b"font-bytes" * 20
+
+    def setUp(self):
+        super().setUp()
+        self.store = os.path.join(self.dir, "store")
+        self.env = os.environ.get(bc.FONT_STORE_ENV)
+        os.environ[bc.FONT_STORE_ENV] = self.store
+        self.real_catalog = bc.font_catalog
+        entry = {
+            "url": "https://example.test/a.woff2", "sha256": hashlib.sha256(self.BODY).hexdigest(),
+            "size": len(self.BODY), "weight": "400", "range": "",
+        }
+        catalog = [{"id": "sample", "family": "Sample", "group": "영문", "fallback": "serif", "files": [entry]}]
+        bc.font_catalog = lambda: catalog
+
+    def tearDown(self):
+        bc.font_catalog = self.real_catalog
+        if self.env is None:
+            os.environ.pop(bc.FONT_STORE_ENV, None)
+        else:
+            os.environ[bc.FONT_STORE_ENV] = self.env
+        super().tearDown()
+
+    def listed(self):
+        _, body = self.request("GET", "/__bc/fonts")
+        return json.loads(body)["fonts"]
+
+    def install(self):
+        status, _ = self.post("/__bc/font-file?id=sample&index=0", self.BODY, raw=True)
+        self.assertEqual(status, 200)
+        status, body = self.post("/__bc/font-use", {"id": "sample"})
+        self.assertEqual(status, 200)
+        return json.loads(body)
+
+    def edits_with_font(self, used=True):
+        font = self.install()
+        family = '"Sample", serif' if used else '"Other", serif'
+        edits = json.loads(json.dumps(EDITS))
+        edits["styles"]["t1"]["base"]["font-family"] = family
+        edits["fonts"] = {"Sample": font["faces"]}
+        return edits, font["faces"][0]["src"][7:]
+
+    def test_listed_font_is_kept_only_when_the_file_matches(self):
+        self.assertFalse(self.listed()[0]["installed"])
+        status, _ = self.post("/__bc/font-file?id=sample&index=0", b"wOF2 something else", raw=True)
+        self.assertEqual(status, 400)
+        self.assertFalse(self.listed()[0]["installed"])
+        self.assertEqual(self.post("/__bc/font-use", {"id": "sample"})[0], 404)
+        self.install()
+        self.assertTrue(self.listed()[0]["installed"])
+
+    def test_unknown_font_file_is_refused(self):
+        self.assertEqual(self.post("/__bc/font-file?id=nope&index=0", self.BODY, raw=True)[0], 400)
+        self.assertEqual(self.post("/__bc/font-file?id=sample&index=9", self.BODY, raw=True)[0], 400)
+
+    def test_font_requests_from_other_sites_are_refused(self):
+        status, _ = self.request("POST", "/__bc/font-upload?name=a.ttf", self.BODY, {"Origin": "http://evil.test", "X-Beavercoat": "1"})
+        self.assertEqual(status, 403)
+
+    def test_changed_font_file_in_the_store_is_not_used(self):
+        self.install()
+        Path(self.store, "sample", "a.woff2").write_bytes(b"wOF2 tampered")
+        self.assertEqual(self.post("/__bc/font-use", {"id": "sample"})[0], 404)
+
+    def test_uploaded_font_is_listed_and_named_from_the_file(self):
+        status, body = self.post("/__bc/font-upload?name=" + urllib.parse.quote('내"글꼴{x}.ttf'), b"\x00\x01\x00\x00data", raw=True)
+        self.assertEqual(status, 200)
+        font_id = json.loads(body)["id"]
+        mine = [f for f in self.listed() if f["id"] == font_id][0]
+        self.assertEqual(mine["family"], "내글꼴x")
+        status, body = self.post("/__bc/font-use", {"id": font_id})
+        self.assertEqual(status, 200)
+        face = json.loads(body)["faces"][0]
+        self.assertEqual(face["format"], "truetype")
+        self.assertTrue(face["src"].endswith(".ttf"))
+
+    def test_file_that_is_not_a_font_is_refused(self):
+        status, _ = self.post("/__bc/font-upload?name=a.ttf", b"<html>not a font</html>", raw=True)
+        self.assertEqual(status, 400)
+
+    def test_used_font_goes_into_results_viewer_and_zip(self):
+        edits, name = self.edits_with_font()
+        self.assertEqual(self.post("/__bc/save", {"page": "index.html", "edits": edits, "svgs": {}})[0], 200)
+        self.assertEqual(Path(self.root, "결과", "beavercoat-assets", name).read_bytes(), self.BODY)
+        out, _ = bc.build_viewer(self.project, "index.html")
+        self.assertIn(base64.b64encode(self.BODY).decode("ascii"), Path(out).read_text(encoding="utf-8"))
+        out, _ = bc.build_zip(self.project)
+        names = zipfile.ZipFile(out).namelist()
+        self.assertTrue(any(n.endswith(f".design-edits/uploads/{name}") for n in names))
+
+    def test_font_no_longer_used_is_left_out(self):
+        edits, name = self.edits_with_font(used=False)
+        self.assertEqual(self.post("/__bc/save", {"page": "index.html", "edits": edits, "svgs": {}})[0], 200)
+        self.assertEqual(json.loads(Path(self.root, ".design-edits", "pages", "index.html.json").read_text(encoding="utf-8"))["fonts"], {})
+        self.assertFalse(Path(self.root, "결과", "beavercoat-assets", name).exists())
+        out, _ = bc.build_zip(self.project)
+        self.assertFalse(any(name in n for n in zipfile.ZipFile(out).namelist()))
+
+    def test_real_catalog_is_pinned_and_open_licensed(self):
+        fonts = self.real_catalog()
+        self.assertEqual(len(fonts), 11)
+        for font in fonts:
+            self.assertEqual(font["license"], "OFL-1.1")
+            for entry in font["files"]:
+                self.assertRegex(entry["url"], r"^https://cdn\.jsdelivr\.net/npm/\S+@\d[\d.]*/")
+                self.assertRegex(entry["sha256"], r"^[0-9a-f]{64}$")
 
 
 if __name__ == "__main__":
