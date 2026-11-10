@@ -660,6 +660,12 @@ class FontTest(ServerTest):
         out, _ = bc.build_zip(self.project)
         self.assertFalse(any(name in n for n in zipfile.ZipFile(out).namelist()))
 
+    def test_font_counts_as_used_only_by_its_whole_name(self):
+        face = [{"src": "upload:a.woff2", "format": "woff2"}]
+        edits = {"fonts": {"Sans": face, "Sans Bold": face, "Serif": face},
+                 "styles": {"t1": {"base": {"font-family": '"Sans Bold", serif'}}, "t2": {"mobile": {"font-family": "Serif, sans-serif"}}}}
+        self.assertEqual(set(bc.fonts_in_use(edits)), {"Sans Bold", "Serif"})
+
     def test_real_catalog_is_pinned_and_open_licensed(self):
         fonts = self.real_catalog()
         self.assertEqual(len(fonts), 11)

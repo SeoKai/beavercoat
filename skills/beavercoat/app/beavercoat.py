@@ -390,7 +390,8 @@ def fonts_in_use(edits):
     values = font_values(edits)
     if not isinstance(fonts, dict):
         return {}
-    return {family: faces for family, faces in fonts.items() if any(f'"{family}"' in value for value in values)}
+    used = {name.strip().strip("'\"").strip() for value in values for name in value.split(",")}
+    return {family: faces for family, faces in fonts.items() if family in used}
 
 
 def font_faces(edits):

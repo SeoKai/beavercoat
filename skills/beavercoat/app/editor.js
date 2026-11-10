@@ -1122,6 +1122,13 @@
   const turnOut = (f, x, y) => ({ x: x * f.cos - y * f.sin, y: x * f.sin + y * f.cos });
   const turnIn = (f, x, y) => ({ x: x * f.cos + y * f.sin, y: -x * f.sin + y * f.cos });
   const framePoint = (f, x, y) => { const v = turnOut(f, x, y); return { x: f.cx + v.x, y: f.cy + v.y }; };
+  // Whether a point in the page lies inside the element's own box, turned with it when it's turned.
+  function insideBox(el, x, y) {
+    const f = turnedFrame(el);
+    if (f) { const v = turnIn(f, x - f.cx, y - f.cy); return Math.abs(v.x) <= f.w / 2 && Math.abs(v.y) <= f.h / 2; }
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
   const ownSize = (el) => { const f = turnedFrame(el), r = el.getBoundingClientRect(); return f ? { w: f.w, h: f.h } : { w: r.width, h: r.height }; };
 
   function drawFrame(f, color) {
@@ -1186,9 +1193,15 @@
   }
 
   // Like InDesign: a red plus at the lower right says the text doesn't fit in its box.
+  // Finding them reads the layout of every edited box, so it runs a few times a second, not every frame.
+  let oversetCache = { at: -Infinity, keys: [] };
   function drawOversets() {
-    for (const k of oversetKeys()) {
-      const r = bc.elementOf(k).getBoundingClientRect();
+    const now = performance.now();
+    if (now - oversetCache.at > 200) oversetCache = { at: now, keys: oversetKeys() };
+    for (const k of oversetCache.keys) {
+      const el = bc.elementOf(k);
+      if (!el || !el.isConnected) continue;
+      const r = el.getBoundingClientRect();
       drawRect(r, "#E5484D");
       const c = toCanvas(r.right, r.bottom);
       const x = c.x - 22, y = c.y - 8;
@@ -1404,10 +1417,7 @@
     if (e.shiftKey) { toggleSelect(target); return; }
     if (S.extra.length) {
       // Anywhere inside a selected box's outline counts, even where something else is the topmost element.
-      const hitBox = selectedAll().find((x) => target && x.contains(target)) || selectedAll().find((x) => {
-        const r = x.getBoundingClientRect();
-        return f.x >= r.left && f.x <= r.right && f.y >= r.top && f.y <= r.bottom;
-      });
+      const hitBox = selectedAll().find((x) => target && x.contains(target)) || selectedAll().find((x) => insideBox(x, f.x, f.y));
       if (hitBox) startMoveAll(e, p, hitBox);
       else select(target);
       return;
@@ -1415,8 +1425,7 @@
     // Inside the selected box's outline a drag moves it, even where it is cut off or covered
     // and so can't be clicked itself. A plain click still selects what's there.
     if (S.sel && !isSvgChild(S.sel) && S.sel !== target && !(target && S.sel.contains(target))) {
-      const r = S.sel.getBoundingClientRect();
-      if (f.x >= r.left && f.x <= r.right && f.y >= r.top && f.y <= r.bottom) { startMove(e, p, target); return; }
+      if (insideBox(S.sel, f.x, f.y)) { startMove(e, p, target); return; }
     }
     if (!S.sel || !target) { select(target); return; }
     if (S.sel === target) { startMove(e, p); return; }
@@ -1475,6 +1484,14 @@
 
   // A moved element can end up out of sight: cut off by a box that clips what spills out of it,
   // or under something drawn later. Says which, so the panel can explain and offer a way back.
+  function paints(el) {
+    const cs = win.getComputedStyle(el);
+    if (cs.visibility !== "visible" || Number(cs.opacity) === 0) return false;
+    if (["IMG", "VIDEO", "CANVAS", "SVG", "svg", "IFRAME", "INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(el.tagName)) return true;
+    if (cs.backgroundImage !== "none" || !/^(transparent|rgba\(.*,\s*0\))$/.test(cs.backgroundColor)) return true;
+    return [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+  }
+
   function hiddenBy(el) {
     if (!el || isSvgChild(el) || !el.getClientRects().length) return null;
     const r = el.getBoundingClientRect();
@@ -1487,8 +1504,16 @@
       const h = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
       if ((Math.max(0, w) * Math.max(0, h)) / (r.width * r.height) < 0.5) return { clip: p };
     }
-    const top = doc.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    if (top && top !== el && !el.contains(top) && !top.contains(el)) return { cover: top };
+    const sx = win.scrollX, sy = win.scrollY, page = doc.documentElement;
+    if (r.right + sx <= 0 || r.bottom + sy <= 0 || r.left + sx >= page.scrollWidth) return { off: true };
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x < 0 || y < 0 || x > win.innerWidth || y > win.innerHeight) return null;
+    // Only what is drawn on top counts: an empty wrapper laid over the page hides nothing.
+    for (const top of doc.elementsFromPoint(x, y)) {
+      if (top === el || el.contains(top)) return null;
+      if (top.contains(el)) continue;
+      if (paints(top)) return { cover: top };
+    }
     return null;
   }
 
@@ -2209,6 +2234,7 @@
       box.append(h("div", { class: "group" }, h("div", { class: "warn" },
         lost.clip
           ? `‘${nameOf(lost.clip)}’ 밖으로 나가 잘려서 보이지 않습니다. 이 상자는 넘치는 내용을 잘라 냅니다.`
+          : lost.off ? "페이지 밖으로 나가 보이지 않습니다."
           : `‘${nameOf(lost.cover)}’ 아래에 가려 보이지 않습니다.`,
         h("div", { class: "btns" },
           h("button", { onclick: back }, "원래 자리로"),
