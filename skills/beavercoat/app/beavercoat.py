@@ -7,11 +7,13 @@ Usage:
     python3 beavercoat.py [folder] --build
 
 Edits live in <folder>/.design-edits/. Every save regenerates <folder>/결과/
-(or 결과-beavercoat/ if the folder already holds a 결과/ of its own).
+(results/ in English, or with -beavercoat added if the folder already holds one of its own).
+Messages and new folder names follow --lang, then BEAVERCOAT_LANG, then the system language.
 The server only listens on 127.0.0.1. Python standard library only.
 """
 import argparse
 import base64
+import contextvars
 import filecmp
 import functools
 import hashlib
@@ -23,6 +25,7 @@ import os
 import posixpath
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -35,8 +38,8 @@ import zipfile
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 EDITS_DIR = ".design-edits"
-RESULT_DIR = "결과"
-SHARE_DIR = "공유"
+# Generated folders, by kind and language. A project keeps whichever one it already has.
+OUTPUT_NAMES = {"result": {"ko": "결과", "en": "results"}, "share": {"ko": "공유", "en": "share"}}
 BUNDLED_APP_DIR = ".beavercoat"
 OUTPUT_MARKER = ".beavercoat-output"
 ALT_OUTPUT_SUFFIX = "-beavercoat"
@@ -45,8 +48,10 @@ TOOL_DIRS = {EDITS_DIR, BUNDLED_APP_DIR, ".git", ".claude", "node_modules", "__p
 PRIVATE_EXTS = (".pem", ".key", ".p12", ".pfx")
 PRIVATE_NAMES = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
 SKIP_FILES = {".DS_Store", "Thumbs.db"}
-APP_FILES = {"editor.html", "editor.js", "apply.js", "fonts.json", "OFL.txt"}
-FONT_NOTICE = "글꼴-라이선스.txt"
+APP_FILES = {"editor.html", "editor.js", "editor-en.js", "apply.js", "fonts.json", "OFL.txt"}
+FONT_NOTICES = {"ko": "글꼴-라이선스.txt", "en": "font-licenses.txt"}
+LANGS = ("ko", "en")
+LANG_ENV = "BEAVERCOAT_LANG"
 FONT_STORE_ENV = "BEAVERCOAT_FONT_DIR"
 FONT_FORMATS = {"woff2": "woff2", "woff": "woff", "ttf": "truetype", "otf": "opentype"}
 FONT_MAGIC = {b"wOF2": "woff2", b"wOFF": "woff", b"OTTO": "otf", b"\x00\x01\x00\x00": "ttf", b"true": "ttf"}
@@ -61,6 +66,55 @@ EMPTY_EDITS = {
 
 
 # ---------- paths and storage ----------
+
+# ---------- language ----------
+
+_request_lang = contextvars.ContextVar("beavercoat_lang", default=None)
+_system_lang = None
+
+
+def detect_lang():
+    """Korean or English, from what this computer is set to show."""
+    given = os.environ.get(LANG_ENV, "").lower()
+    if given in LANGS:
+        return given
+    found = ""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            found = "ko" if ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF == 0x12 else "en"
+        elif sys.platform == "darwin":
+            out = subprocess.run(["defaults", "read", "-g", "AppleLanguages"], capture_output=True, text=True, timeout=3).stdout
+            first = re.search(r"[A-Za-z]{2,3}", out)
+            found = first.group(0).lower() if first else ""
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        found = ""
+    if not found:
+        for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
+            value = os.environ.get(var, "")
+            if value and value not in ("C", "POSIX") and not value.startswith("C."):
+                found = value[:2].lower()
+                break
+    return "ko" if found.startswith("ko") else "en"
+
+
+def lang():
+    """The language for messages: the editor's when it asked, otherwise this computer's."""
+    global _system_lang
+    if _request_lang.get():
+        return _request_lang.get()
+    if _system_lang is None:
+        _system_lang = detect_lang()
+    return _system_lang
+
+
+def tr(ko, en):
+    return en if lang() == "en" else ko
+
+
+def font_notice_file():
+    return FONT_NOTICES[lang()]
+
 
 def nfc(text):
     return unicodedata.normalize("NFC", text)
@@ -102,13 +156,16 @@ class Project:
     def _is_marked(self, name):
         return os.path.isfile(self.path(name, OUTPUT_MARKER))
 
-    def output_name(self, name):
-        """The folder to generate into. A folder this tool didn't create is the user's and is left alone."""
+    def output_name(self, kind):
+        """The folder to generate into. One made earlier is kept, in whichever language it was named.
+        A folder this tool didn't create is the user's and is left alone."""
+        names = OUTPUT_NAMES[kind]
+        for base in sorted(names.values(), key=lambda n: n != names[lang()]):
+            for made in (base + ALT_OUTPUT_SUFFIX, base):
+                if self._is_marked(made):
+                    return made
+        name = names[lang()]
         alt = name + ALT_OUTPUT_SUFFIX
-        if self._is_marked(alt):
-            return alt
-        if self._is_marked(name):
-            return name
         main = self.path(name)
         if os.path.islink(main) or os.path.isfile(main):
             return alt
@@ -117,7 +174,10 @@ class Project:
         return name
 
     def generated_tops(self):
-        return {nfc(self.output_name(RESULT_DIR)), nfc(self.output_name(SHARE_DIR))}
+        tops = {self.output_name(kind) for kind in OUTPUT_NAMES}
+        tops |= {n for names in OUTPUT_NAMES.values() for base in names.values()
+                 for n in (base, base + ALT_OUTPUT_SUFFIX) if self._is_marked(n)}
+        return {nfc(n) for n in tops}
 
     def read_manifest(self, name):
         """Files this tool wrote into a generated folder. The list may come from a received zip, so check it."""
@@ -141,7 +201,7 @@ class Project:
         write_atomic(self.path(name, OUTPUT_MARKER), data)
 
     def share_dir(self):
-        name = self.output_name(SHARE_DIR)
+        name = self.output_name("share")
         if not self._is_marked(name):
             self.write_manifest(name, [])
         return self.path(name)
@@ -160,9 +220,9 @@ class Project:
                 if nfc(d) in TOOL_DIRS or (not rel_base and nfc(d) in generated):
                     continue
                 if os.path.islink(os.path.join(base, d)):
-                    skipped.append(f"{rel_base}{d}: 폴더 링크라서 포함하지 않았습니다")
+                    skipped.append(tr(f"{rel_base}{d}: 폴더 링크라서 포함하지 않았습니다", f"{rel_base}{d}: left out because it is a folder link"))
                 elif d.startswith("."):
-                    skipped.append(f"{rel_base}{d}/: 숨김 폴더라서 포함하지 않았습니다")
+                    skipped.append(tr(f"{rel_base}{d}/: 숨김 폴더라서 포함하지 않았습니다", f"{rel_base}{d}/: left out because it is a hidden folder"))
                 else:
                     kept.append(d)
             dirs[:] = kept
@@ -174,18 +234,18 @@ class Project:
                 if not rel_base and self._is_bundle_file(name, full):
                     continue
                 if not rel_base and name.lower().endswith(".zip"):
-                    skipped.append(f"{rel}: 압축 파일이라 포함하지 않았습니다")
+                    skipped.append(tr(f"{rel}: 압축 파일이라 포함하지 않았습니다", f"{rel}: left out because it is a zip file"))
                     continue
                 if os.path.islink(full):
                     target = os.path.realpath(full)
                     if not os.path.exists(target):
-                        skipped.append(f"{rel}: 끊어진 링크라서 포함하지 않았습니다")
+                        skipped.append(tr(f"{rel}: 끊어진 링크라서 포함하지 않았습니다", f"{rel}: left out because the link is broken"))
                         continue
                     if not target.startswith(root_real + os.sep):
-                        skipped.append(f"{rel}: 프로젝트 밖을 가리키는 링크라서 포함하지 않았습니다")
+                        skipped.append(tr(f"{rel}: 프로젝트 밖을 가리키는 링크라서 포함하지 않았습니다", f"{rel}: left out because it links outside the project"))
                         continue
                 if name.startswith(".") or name in PRIVATE_NAMES or name.lower().endswith(PRIVATE_EXTS):
-                    skipped.append(f"{rel}: 숨김 파일이거나 비밀 정보가 담길 수 있어 포함하지 않았습니다")
+                    skipped.append(tr(f"{rel}: 숨김 파일이거나 비밀 정보가 담길 수 있어 포함하지 않았습니다", f"{rel}: left out because it is hidden or may hold secrets"))
                     continue
                 files.append(rel)
         return files, skipped
@@ -194,13 +254,14 @@ class Project:
     def _is_bundle_file(name, full):
         """Launchers and the guide a received zip came with. They are added back to any new zip."""
         name = nfc(name)
-        if name in launcher_files():
+        if any(name in launcher_files(code) for code in LANGS):
             return True
-        if name != RECIPIENT_GUIDE:
+        guide = next((text for guide_name, text in RECIPIENT_GUIDES.values() if guide_name == name), None)
+        if guide is None:
             return False
         try:
             with open(full, "rb") as f:
-                return f.read() == README_FOR_RECIPIENT.encode("utf-8")
+                return f.read() == guide.encode("utf-8")
         except OSError:
             return False
 
@@ -306,7 +367,7 @@ def font_list():
 def font_family_name(file_name):
     """A name usable in CSS, from the name of a file someone added."""
     stem = os.path.splitext(os.path.basename(nfc(file_name).replace("\\", "/")))[0]
-    return re.sub(r'[\x00-\x1f"\\<>{};]', "", stem).strip()[:60] or "내 글꼴"
+    return re.sub(r'[\x00-\x1f"\\<>{};]', "", stem).strip()[:60] or tr("내 글꼴", "My font")
 
 
 def add_custom_font(file_name, body):
@@ -417,7 +478,7 @@ def font_notice(all_edits):
             license_text = f.read()
     except OSError:
         return ""
-    lines = ["이 결과물에 담긴 글꼴과 그 저작권 표시입니다.", ""]
+    lines = [tr("이 결과물에 담긴 글꼴과 그 저작권 표시입니다.", "The fonts in these files and their copyright notices."), ""]
     for font in fonts:
         lines += [font["family"], font["copyright"], ""]
     return "\n".join(lines) + "\n" + license_text
@@ -526,7 +587,7 @@ def build_results(project):
     Returns (folder, messages). One unreadable file is reported and doesn't stop the rest.
     Only files this tool wrote earlier are ever deleted.
     """
-    name = project.output_name(RESULT_DIR)
+    name = project.output_name("result")
     out = project.path(name)
     files, skipped = project.scan()
     wanted = set(files)
@@ -537,7 +598,7 @@ def build_results(project):
             try:
                 edits = project.load_edits(rel)
             except ValueError:
-                skipped.append(f"{rel}: 저장된 편집 파일이 손상되어 수정 없이 복사했습니다")
+                skipped.append(tr(f"{rel}: 저장된 편집 파일이 손상되어 수정 없이 복사했습니다", f"{rel}: the saved edits are damaged, so the page was copied without them"))
                 continue
             if has_edits(edits):
                 pages[rel] = edits
@@ -547,8 +608,9 @@ def build_results(project):
         if os.path.isfile(project.upload_file(upload)):
             wanted.add(f"beavercoat-assets/{os.path.basename(upload)}")
     notice = font_notice(pages.values())
+    notice_name = font_notice_file()
     if notice:
-        wanted.add(f"beavercoat-assets/{FONT_NOTICE}")
+        wanted.add(f"beavercoat-assets/{notice_name}")
 
     for rel in set(project.read_manifest(name)) - wanted:
         remove_generated(out, rel)
@@ -565,19 +627,19 @@ def build_results(project):
             else:
                 copy_if_changed(src, dest)
         except OSError:
-            skipped.append(f"{rel}: 파일을 읽거나 쓰지 못해 건너뛰었습니다")
+            skipped.append(tr(f"{rel}: 파일을 읽거나 쓰지 못해 건너뛰었습니다", f"{rel}: skipped because it could not be read or written"))
     for upload in uploads:
         src = project.upload_file(upload)
         if os.path.isfile(src):
             try:
                 copy_if_changed(src, os.path.join(out, "beavercoat-assets", os.path.basename(upload)))
             except OSError:
-                skipped.append(f"{upload}: 넣은 이미지를 복사하지 못했습니다")
+                skipped.append(tr(f"{upload}: 넣은 이미지를 복사하지 못했습니다", f"{upload}: the added image could not be copied"))
     if notice:
         try:
-            write_atomic(os.path.join(out, "beavercoat-assets", FONT_NOTICE), notice.encode("utf-8"))
+            write_atomic(os.path.join(out, "beavercoat-assets", notice_name), notice.encode("utf-8"))
         except OSError:
-            skipped.append(f"{FONT_NOTICE}: 글꼴 라이선스 파일을 쓰지 못했습니다")
+            skipped.append(tr(f"{notice_name}: 글꼴 라이선스 파일을 쓰지 못했습니다", f"{notice_name}: the font license file could not be written"))
     return out, sorted(set(skipped))
 
 
@@ -696,19 +758,19 @@ class Inliner:
         if WEB_URL_RE.match(url):
             self.warnings.append(f"{kind}: {url}")
         elif url and not url.startswith("#") and not EXTERNAL_RE.match(url):
-            self.warnings.append(f"파일을 찾지 못했습니다: {url}")
+            self.warnings.append(tr(f"파일을 찾지 못했습니다: {url}", f"File not found: {url}"))
 
     def data_uri(self, full, rel=None):
         mime = mimetypes.guess_type(rel or full)[0] or "application/octet-stream"
         with open(full, "rb") as f:
             return f"data:{mime};base64,{base64.b64encode(f.read()).decode('ascii')}"
 
-    def inline_file(self, url, kind="이미지·미디어"):
+    def inline_file(self, url, kind=None):
         """The data URI for a local file, or None after warning."""
         found = self.local(url)
         if found:
             return self.data_uri(found[1], found[0])
-        self.report(url, kind)
+        self.report(url, kind or tr("이미지·미디어", "Image or media"))
         return None
 
     def inline_css(self, css, base, seen=()):
@@ -717,7 +779,7 @@ class Inliner:
             url, media = match.group(2), match.group(3).strip()
             found = self.local(url, base)
             if not found:
-                self.report(url, "글꼴·스타일")
+                self.report(url, tr("글꼴·스타일", "Font or style"))
                 return match.group(0)
             if found[0] in seen:
                 return ""
@@ -729,7 +791,7 @@ class Inliner:
             found = self.local(url, base)
             if found:
                 return f'url("{self.data_uri(found[1], found[0])}")'
-            self.report(url, "CSS 파일")
+            self.report(url, tr("CSS 파일", "CSS file"))
             return match.group(0)
 
         css = URL_FN.sub(url_fn, CSS_IMPORT.sub(imported, css))
@@ -757,13 +819,13 @@ class Inliner:
             return whole
         found = self.local(src)
         if not found:
-            self.report(src, "스크립트")
+            self.report(src, tr("스크립트", "Script"))
             return whole
         code = read_text(found[1])
         kept = rewrite_attrs(attrs, lambda name, _: False if name in ("src", "integrity", "crossorigin") else None).rstrip()
         if found_attrs.get("type", "").strip().lower() == "module":
             if JS_IMPORT.search(code):
-                self.warnings.append(f"이 모듈이 불러오는 다른 파일은 포함되지 않습니다: {src}")
+                self.warnings.append(tr(f"이 모듈이 불러오는 다른 파일은 포함되지 않습니다: {src}", f"Files this module loads are not included: {src}"))
         elif "defer" in found_attrs or "async" in found_attrs:
             # Inline scripts ignore these, so the code stays in src to keep its run order.
             return f'<script{kept} src="{self.data_uri(found[1], "x.js").replace("text/plain", "text/javascript")}"></script>'
@@ -778,7 +840,7 @@ class Inliner:
         if "stylesheet" in rel_words:
             found = self.local(href)
             if not found:
-                self.report(href, "글꼴·스타일")
+                self.report(href, tr("글꼴·스타일", "Font or style"))
                 return whole
             css = self.inline_css(read_text(found[1]), posixpath.dirname(found[0]), (found[0],))
             kept = "".join(f' {n}="{attr_escape(values[n])}"' for n in ("media", "id", "title") if n in values)
@@ -813,9 +875,9 @@ class Inliner:
             if attr in ("href", "xlink:href") and name == "image":
                 return self.inline_file(value)
             if attr in ("href", "xlink:href") and name == "use" and self.local(value):
-                self.warnings.append(f"다른 SVG 파일의 도형은 포함되지 않습니다: {value}")
+                self.warnings.append(tr(f"다른 SVG 파일의 도형은 포함되지 않습니다: {value}", f"Shapes from another SVG file are not included: {value}"))
             if attr == "src" and name == "iframe" and self.local(value):
-                self.warnings.append(f"프레임 안의 페이지는 포함되지 않습니다: {value}")
+                self.warnings.append(tr(f"프레임 안의 페이지는 포함되지 않습니다: {value}", f"Pages inside frames are not included: {value}"))
             return None
 
         new = rewrite_attrs(body, rewrite)
@@ -851,14 +913,14 @@ def build_viewer(project, page):
                 if os.path.isfile(full):
                     edits["images"][key] = inliner.data_uri(full)
                 else:
-                    inliner.warnings.append(f"넣은 이미지를 찾지 못했습니다: {value[7:]}")
+                    inliner.warnings.append(tr(f"넣은 이미지를 찾지 못했습니다: {value[7:]}", f"Added image not found: {value[7:]}"))
         for face in font_faces(edits):
             if face["src"].startswith("upload:"):
                 full = project.upload_file(face["src"][7:])
                 if os.path.isfile(full):
                     face["src"] = inliner.data_uri(full)
                 else:
-                    inliner.warnings.append(f"넣은 글꼴을 찾지 못했습니다: {face['src'][7:]}")
+                    inliner.warnings.append(tr(f"넣은 글꼴을 찾지 못했습니다: {face['src'][7:]}", f"Added font not found: {face['src'][7:]}"))
         snippet = edits_snippet(edits, "") + f"<script>{apply_source()}</script>"
         notice = font_notice([edits])
         if notice:
@@ -867,31 +929,38 @@ def build_viewer(project, page):
     html = page_with_snippet(html, snippet)
     # Folder names stay in the file name, or a/index.html and b/index.html would overwrite each other.
     stem = re.sub(r"\.html?$", "", page.replace("/", "-"), flags=re.I)
-    out = os.path.join(project.share_dir(), f"{stem}-보기용.html")
+    out = os.path.join(project.share_dir(), tr(f"{stem}-보기용.html", f"{stem}-view.html"))
     write_atomic(out, html.encode("utf-8"))
     return out, sorted(set(inliner.warnings))
 
 
-def launcher_files():
+LAUNCHER_TEXT = {
+    "ko": ("편집기 열기", "Python 3이 필요합니다. https://www.python.org/downloads/ 에서 설치한 뒤 다시 실행해 주세요.", "Enter를 누르면 닫힙니다."),
+    "en": ("Open editor", "Python 3 is needed. Install it from https://www.python.org/downloads/ and run this again.", "Press Enter to close."),
+}
+
+
+def launcher_files(code=None):
+    name, need_python, close = LAUNCHER_TEXT[code or lang()]
     mac = (
         '#!/bin/bash\ncd "$(dirname "$0")" || exit 1\n'
         'if command -v python3 >/dev/null 2>&1; then\n'
         '  python3 .beavercoat/beavercoat.py .\nelse\n'
-        '  echo "Python 3이 필요합니다. https://www.python.org/downloads/ 에서 설치한 뒤 다시 실행해 주세요."\n'
-        '  read -r -p "Enter를 누르면 닫힙니다."\nfi\n'
+        f'  echo "{need_python}"\n'
+        f'  read -r -p "{close}"\nfi\n'
     )
     win = (
         "@echo off\r\nchcp 65001 >nul\r\ncd /d \"%~dp0\"\r\n"
         "py -3 --version >nul 2>&1 && (py -3 .beavercoat\\beavercoat.py . & goto :end)\r\n"
         "python --version >nul 2>&1 && (python .beavercoat\\beavercoat.py . & goto :end)\r\n"
-        "echo Python 3이 필요합니다. https://www.python.org/downloads/ 에서 설치한 뒤 다시 실행해 주세요.\r\n"
+        f"echo {need_python}\r\n"
         ":end\r\npause\r\n"
     )
-    return {"편집기 열기.command": (mac, 0o755), "편집기 열기.bat": (win, 0o644)}
+    return {f"{name}.command": (mac, 0o755), f"{name}.bat": (win, 0o644)}
 
 
-RECIPIENT_GUIDE = "사용법.txt"
-README_FOR_RECIPIENT = """HTML 프로토타입과 편집기 beavercoat
+RECIPIENT_GUIDES = {
+    "ko": ("사용법.txt", """HTML 프로토타입과 편집기 beavercoat
 
 [여는 방법]
 Mac:     "편집기 열기.command"를 더블클릭합니다.
@@ -906,7 +975,24 @@ Python 3이 필요합니다. 없다면 https://www.python.org/downloads/ 에서 
 
 수정한 뒤에는 "저장"을 누르고 폴더 전체를 다시 압축해 보내 주세요.
 이 프로그램은 내 컴퓨터 안에서만 동작합니다. 글꼴을 받을 때만 인터넷을 사용합니다.
-"""
+"""),
+    "en": ("How to open.txt", """An HTML prototype with the beavercoat editor
+
+[Opening it]
+Mac:     double-click "Open editor.command".
+         If a security warning appears, Control-click the file and choose "Open".
+Windows: double-click "Open editor.bat".
+Python 3 is needed. If you don't have it, install it from https://www.python.org/downloads/.
+The editor opens in your browser. To stop, close the window that started it.
+
+[Folders]
+results/       the pages with edits applied
+.design-edits/ the saved edits (a hidden folder on a Mac)
+
+After editing, press "Save" and zip the whole folder again to send it back.
+This program only runs on your own computer. It goes online only to fetch fonts.
+"""),
+}
 
 
 def zip_time(full):
@@ -933,7 +1019,7 @@ def build_zip(project):
     """Create <share>/<project>-편집용.zip with the editor bundled. Returns (path, messages)."""
     results, skipped = build_results(project)
     result_name = os.path.basename(results)
-    out = os.path.join(project.share_dir(), f"{project.name}-편집용.zip")
+    out = os.path.join(project.share_dir(), tr(f"{project.name}-편집용.zip", f"{project.name}-editable.zip"))
     top = project.name
 
     def add_file(z, full, arc, mode=0o644):
@@ -953,7 +1039,7 @@ def build_zip(project):
         try:
             add_file(z, full, arc)
         except OSError:
-            skipped.append(f"{arc}: 파일을 읽지 못해 압축에 넣지 않았습니다")
+            skipped.append(tr(f"{arc}: 파일을 읽지 못해 압축에 넣지 않았습니다", f"{arc}: left out of the zip because it could not be read"))
 
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(out), prefix=".bc-", suffix=".tmp")
     os.close(fd)
@@ -982,8 +1068,9 @@ def build_zip(project):
                 add_file(z, os.path.join(APP_DIR, name), f"{BUNDLED_APP_DIR}/{name}")
             for name, (text, mode) in launcher_files().items():
                 add_text(z, name, text, mode)
-            if RECIPIENT_GUIDE not in {nfc(rel) for rel in sources}:
-                add_text(z, RECIPIENT_GUIDE, README_FOR_RECIPIENT)
+            guide_name, guide = RECIPIENT_GUIDES[lang()]
+            if guide_name not in {nfc(rel) for rel in sources}:
+                add_text(z, guide_name, guide)
         os.chmod(tmp, 0o644)
         os.replace(tmp, out)
     except BaseException:
@@ -1045,7 +1132,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_HEAD(self):
         self.do_GET()
 
+    def _use_client_lang(self):
+        asked = self.headers.get("X-Beavercoat-Lang", "")
+        _request_lang.set(asked if asked in LANGS else None)
+
     def do_GET(self):
+        self._use_client_lang()
         if not self._host_ok():
             return self.send_error(403, "Forbidden host")
         url = urllib.parse.urlparse(self.path)
@@ -1102,6 +1194,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self.send_error(404, "Not found")
 
     def do_POST(self):
+        self._use_client_lang()
         url = urllib.parse.urlparse(self.path)
         if not self._post_ok():
             return self.send_error(403, "Forbidden")
@@ -1235,7 +1328,7 @@ def start_server(project, port_arg):
             return http.server.ThreadingHTTPServer(("127.0.0.1", port), handler), port
         except OSError:
             continue
-    sys.exit("사용할 수 있는 포트를 찾지 못했습니다. --port로 다른 번호를 지정해 주세요.")
+    sys.exit(tr("사용할 수 있는 포트를 찾지 못했습니다. --port로 다른 번호를 지정해 주세요.", "No free port found. Pick another one with --port."))
 
 
 def page_argument(project, given):
@@ -1252,45 +1345,49 @@ def main():
     parser.add_argument("--page", help="HTML file to open, relative to the folder")
     parser.add_argument("--port", type=int)
     parser.add_argument("--no-open", action="store_true", help="do not open a browser")
-    parser.add_argument("--build", action="store_true", help="regenerate 결과/ and exit")
+    parser.add_argument("--build", action="store_true", help="regenerate the results folder and exit")
     parser.add_argument("--export", choices=["viewer", "zip"], help="create a shareable file and exit")
+    parser.add_argument("--lang", choices=LANGS, help="language for messages and new folder names (default: the system's)")
     args = parser.parse_args()
+    global _system_lang
+    if args.lang:
+        _system_lang = args.lang
 
     if not os.path.isdir(args.folder):
-        sys.exit(f"폴더를 찾지 못했습니다: {args.folder}")
+        sys.exit(tr(f"폴더를 찾지 못했습니다: {args.folder}", f"Folder not found: {args.folder}"))
     project = Project(args.folder)
     page = page_argument(project, args.page) if args.page else project.default_page()
     if page is None:
-        sys.exit("이 폴더에서 HTML 파일을 찾지 못했습니다.")
+        sys.exit(tr("이 폴더에서 HTML 파일을 찾지 못했습니다.", "No HTML file found in this folder."))
     if page not in project.pages():
-        sys.exit(f"페이지를 찾지 못했습니다: {page}")
+        sys.exit(tr(f"페이지를 찾지 못했습니다: {page}", f"Page not found: {page}"))
 
     if args.build:
         out, skipped = build_results(project)
         print(out)
         for message in skipped:
-            print("주의:", message)
+            print(tr("주의:", "Note:"), message)
         return
     if args.export == "viewer":
         try:
             out, warnings = build_viewer(project, page)
         except ValueError:
-            sys.exit(f"저장된 편집 파일이 손상되었습니다: {os.path.relpath(project.edits_file(page), project.root)}")
+            sys.exit(tr("저장된 편집 파일이 손상되었습니다: ", "The saved edits are damaged: ") + os.path.relpath(project.edits_file(page), project.root))
         print(out)
         for w in warnings:
-            print("주의:", w)
+            print(tr("주의:", "Note:"), w)
         return
     if args.export == "zip":
         out, skipped = build_zip(project)
         print(out)
         for message in skipped:
-            print("주의:", message)
+            print(tr("주의:", "Note:"), message)
         return
 
     server, port = start_server(project, args.port)
     url = f"http://127.0.0.1:{port}/__bc/editor.html?page={urllib.parse.quote(page)}"
-    print(f"beavercoat 편집기: {url}", flush=True)
-    print("끝내려면 Ctrl+C를 누르거나 이 창을 닫으세요.", flush=True)
+    print(tr(f"beavercoat 편집기: {url}", f"beavercoat editor: {url}"), flush=True)
+    print(tr("끝내려면 Ctrl+C를 누르거나 이 창을 닫으세요.", "To stop, press Ctrl+C or close this window."), flush=True)
     if not args.no_open:
         threading.Timer(0.3, webbrowser.open, args=(url,)).start()
     try:

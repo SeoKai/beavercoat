@@ -19,6 +19,8 @@ from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = os.path.join(ROOT, "skills", "beavercoat", "app", "beavercoat.py")
+# Tests read Korean folder names unless they switch language themselves.
+os.environ["BEAVERCOAT_LANG"] = "ko"
 spec = importlib.util.spec_from_file_location("beavercoat", APP)
 bc = importlib.util.module_from_spec(spec)
 sys.modules["beavercoat"] = bc
@@ -554,6 +556,60 @@ class SmallFixesTest(ProjectCase):
         self.assertNotIn("</SCRIPT", bc.escape_inline_js("a='</SCRIPT>'"))
 
 
+class EnglishTest(ServerTest):
+    def setUp(self):
+        super().setUp()
+        self.saved_lang = bc._system_lang
+
+    def tearDown(self):
+        bc._system_lang = self.saved_lang
+        super().tearDown()
+
+    def english(self):
+        bc._system_lang = "en"
+
+    def test_english_names_for_new_folders_and_files(self):
+        self.english()
+        out, _ = bc.build_results(self.project)
+        self.assertEqual(os.path.basename(out), "results")
+        viewer, _ = bc.build_viewer(self.project, "index.html")
+        self.assertEqual(Path(viewer).relative_to(self.root).as_posix(), "share/index-view.html")
+        zipped, _ = bc.build_zip(self.project)
+        self.assertEqual(os.path.basename(zipped), "내 시안-editable.zip")
+        names = {n.split("/", 1)[1] for n in zipfile.ZipFile(zipped).namelist()}
+        self.assertTrue({"Open editor.bat", "Open editor.command", "How to open.txt"} <= names)
+        self.assertFalse(any(n.startswith(("결과", "공유")) for n in names))
+
+    def test_folder_made_in_korean_is_kept_in_english(self):
+        bc.build_results(self.project)
+        self.english()
+        out, _ = bc.build_results(self.project)
+        self.assertEqual(os.path.basename(out), "결과")
+        self.assertFalse(os.path.exists(os.path.join(self.root, "results")))
+        self.assertNotIn("결과/index.html", self.project.walk_files())
+
+    def test_the_editor_language_decides_messages_and_new_folders(self):
+        status, body = self.request("POST", "/__bc/save", json.dumps({"page": "index.html", "edits": EDITS, "svgs": {}}).encode("utf-8"),
+                                    {"Origin": self.origin, "X-Beavercoat": "1", "X-Beavercoat-Lang": "en"})
+        self.assertEqual(status, 200)
+        self.assertTrue(os.path.isfile(os.path.join(self.root, "results", "index.html")))
+
+    def test_received_english_zip_files_are_not_project_files(self):
+        self.english()
+        for name, (text, _) in bc.launcher_files("en").items():
+            Path(self.root, name).write_text(text, encoding="utf-8")
+        Path(self.root, "How to open.txt").write_text(bc.RECIPIENT_GUIDES["en"][1], encoding="utf-8")
+        bc._system_lang = "ko"
+        files = self.project.walk_files()
+        self.assertFalse({"Open editor.bat", "Open editor.command", "How to open.txt"} & set(files))
+
+    def test_language_comes_from_the_setting_first(self):
+        for given, want in (("en", "en"), ("ko", "ko")):
+            os.environ[bc.LANG_ENV] = given
+            self.assertEqual(bc.detect_lang(), want)
+        os.environ[bc.LANG_ENV] = "ko"
+
+
 class FontTest(ServerTest):
     BODY = b"wOF2" + b"font-bytes" * 20
 
@@ -651,12 +707,12 @@ class FontTest(ServerTest):
         out, _ = bc.build_zip(self.project)
         names = zipfile.ZipFile(out).namelist()
         self.assertTrue(any(n.endswith(f".design-edits/uploads/{name}") for n in names))
-        self.assertTrue(any(n.endswith(f"beavercoat-assets/{bc.FONT_NOTICE}") for n in names))
+        self.assertTrue(any(n.endswith(f"beavercoat-assets/{bc.font_notice_file()}") for n in names))
 
     def test_used_font_carries_its_license(self):
         edits, _ = self.edits_with_font()
         self.assertEqual(self.post("/__bc/save", {"page": "index.html", "edits": edits, "svgs": {}})[0], 200)
-        notice = Path(self.root, "결과", "beavercoat-assets", bc.FONT_NOTICE).read_text(encoding="utf-8")
+        notice = Path(self.root, "결과", "beavercoat-assets", bc.font_notice_file()).read_text(encoding="utf-8")
         self.assertIn("Copyright 2020 Sample Authors", notice)
         self.assertIn("SIL OPEN FONT LICENSE Version 1.1", notice)
         out, _ = bc.build_viewer(self.project, "index.html")
@@ -669,7 +725,7 @@ class FontTest(ServerTest):
         self.assertEqual(self.post("/__bc/save", {"page": "index.html", "edits": edits, "svgs": {}})[0], 200)
         self.assertEqual(json.loads(Path(self.root, ".design-edits", "pages", "index.html.json").read_text(encoding="utf-8"))["fonts"], {})
         self.assertFalse(Path(self.root, "결과", "beavercoat-assets", name).exists())
-        self.assertFalse(Path(self.root, "결과", "beavercoat-assets", bc.FONT_NOTICE).exists())
+        self.assertFalse(Path(self.root, "결과", "beavercoat-assets", bc.font_notice_file()).exists())
         out, _ = bc.build_zip(self.project)
         self.assertFalse(any(name in n for n in zipfile.ZipFile(out).namelist()))
 

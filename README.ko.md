@@ -44,6 +44,10 @@ python3 beavercoat/skills/beavercoat/app/beavercoat.py 내/프로토타입/폴�
 python3 skills/beavercoat/app/beavercoat.py samples/basic
 ```
 
+## 언어
+
+편집기는 브라우저 언어를 따릅니다. 한국어 브라우저면 한국어, 그 밖에는 영어입니다. 위쪽 막대 오른쪽의 언어 메뉴로 바꿀 수 있고, 고른 언어는 기억합니다. 명령이 출력하는 안내와 새로 만드는 폴더·파일 이름은 컴퓨터의 언어를 따르며, `--lang ko`나 `--lang en`, 또는 `BEAVERCOAT_LANG` 환경 변수로 정할 수 있습니다.
+
 ## 파일이 저장되는 곳
 
 | 폴더 | 내용 |
@@ -53,7 +57,7 @@ python3 skills/beavercoat/app/beavercoat.py samples/basic
 | `결과/` | 수정이 반영된 사본. 저장할 때마다 새로 만들어짐 |
 | `공유/` | 보내려고 내보낸 파일 |
 
-프로젝트에 원래 `결과/`나 `공유/` 폴더가 있으면 건드리지 않고 `결과-beavercoat/`, `공유-beavercoat/`에 만듭니다. 숨김 파일(`.env` 등), 인증서 파일, 프로젝트 밖을 가리키는 링크는 결과와 압축에 넣지 않고 빠진 목록을 알려 줍니다.
+영어로 쓰면 이 폴더는 `results/`, `share/`가 됩니다. 이미 만들어진 폴더는 어느 언어로 만들었든 그대로 씁니다. 프로젝트에 원래 `결과/`나 `공유/` 폴더가 있으면 건드리지 않고 `결과-beavercoat/`, `공유-beavercoat/`에 만듭니다. 숨김 파일(`.env` 등), 인증서 파일, 프로젝트 밖을 가리키는 링크는 결과와 압축에 넣지 않고 빠진 목록을 알려 줍니다.
 
 ## 공유
 

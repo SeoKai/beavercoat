@@ -140,6 +140,10 @@ dialog code { word-break: break-all; }
   <button id="preview">결과 보기</button>
   <button id="exportViewer" title="서버 없이 더블클릭으로 열리는 HTML 한 장을 만듭니다">보기용 내보내기</button>
   <button id="exportZip" title="받는 분도 편집할 수 있는 압축 파일을 만듭니다">편집용 압축</button>
+  <select id="lang" title="언어" aria-label="언어">
+    <option value="ko">한국어</option>
+    <option value="en">English</option>
+  </select>
 </div>
 <div id="tools"></div>
 <div id="canvas">
@@ -171,6 +175,7 @@ dialog code { word-break: break-all; }
   <option value="#CCCCCC"></option><option value="#FFFFFF"></option>
 </datalist>
 <dialog id="dialog"></dialog>
+<script src="/__bc/editor-en.js"></script>
 <script src="/__bc/editor.js"></script>
 </body>
 </html>

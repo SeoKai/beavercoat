@@ -14,6 +14,8 @@ from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = os.path.join(ROOT, "skills", "beavercoat", "app", "beavercoat.py")
+# Tests read Korean folder names unless they switch language themselves.
+os.environ["BEAVERCOAT_LANG"] = "ko"
 spec = importlib.util.spec_from_file_location("beavercoat_b", APP)
 bc = importlib.util.module_from_spec(spec)
 sys.modules["beavercoat_b"] = bc

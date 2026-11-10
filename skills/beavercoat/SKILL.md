@@ -8,9 +8,9 @@ description: Open an HTML prototype or design-tool export in a Photoshop-style v
 A visual editor for HTML prototypes. Originals stay untouched:
 
 - `.design-edits/`: saved edits, inside the project folder
-- `결과/`: a copy with edits applied, rebuilt on every save
-- `공유/`: files to send to someone
-- If the project already has its own folder with one of those names, `결과-beavercoat/` or `공유-beavercoat/` is used instead. The command prints the folder it used.
+- `results/` (`결과/` in Korean): a copy with edits applied, rebuilt on every save
+- `share/` (`공유/` in Korean): files to send to someone
+- A folder made earlier keeps its name in either language. If the project already has its own folder with one of those names, `-beavercoat` is added to the name. The command prints the folder it used.
 
 The app lives in `app/` beside this file. It needs Python 3 and nothing else.
 
@@ -24,6 +24,8 @@ python3 "<this skill's base directory>/app/beavercoat.py" "<project folder>"
 
 Add `--page path/to/page.html` if the user names a page. The command prints the URL and opens the browser; the port is chosen automatically from 8765 upward. Tell the user the URL in case the browser didn't open. Add `--no-open` only when you will open the URL yourself.
 
+Add `--lang ko` if the user writes in Korean, or `--lang en` if they write in English. It sets the language of the command's messages and of new folder and file names. Without it the system language is used. The editor's screen follows the browser language and has its own language menu.
+
 If the folder has no HTML file, the command says so. Ask which folder they meant.
 
 ## Share
@@ -35,8 +37,8 @@ python3 "<base directory>/app/beavercoat.py" "<project folder>" --export viewer 
 python3 "<base directory>/app/beavercoat.py" "<project folder>" --export zip
 ```
 
-- `viewer` makes `공유/<page>-보기용.html`, one file that opens by double-click with no server or Python. Pass on any `주의:` lines it prints: those resources stay online or may be missing.
-- `zip` makes `공유/<project>-편집용.zip` with the editor bundled. Recipients unzip it and double-click `편집기 열기`. They need Python 3 but not this skill.
+- `viewer` makes `share/<page>-view.html` (`공유/<page>-보기용.html` in Korean), one file that opens by double-click with no server or Python. Pass on any `Note:` (`주의:`) lines it prints: those resources stay online or may be missing.
+- `zip` makes `share/<project>-editable.zip` (`공유/<project>-편집용.zip`) with the editor bundled. Recipients unzip it and double-click `Open editor` (`편집기 열기`). They need Python 3 but not this skill.
 
 Saved edits are what gets exported. Unsaved changes in an open editor are not, so ask the user to save first if an editor is open. The editor's own export buttons save automatically.
 

@@ -2,6 +2,21 @@
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
+
+  // ---------- language ----------
+  // The editor is written in Korean. In English, each text is looked up in editor-en.js where it is shown;
+  // texts with numbers or names in them say both versions with tl().
+  const LANG = (() => {
+    try {
+      const chosen = localStorage.getItem("beavercoat-lang");
+      if (chosen === "ko" || chosen === "en") return chosen;
+    } catch (err) { /* storage may be blocked */ }
+    return /^ko\b/i.test(navigator.language || "") ? "ko" : "en";
+  })();
+  const EN = (LANG === "en" && window.BEAVERCOAT_EN) || {};
+  const tr = (text) => (typeof text === "string" && EN[text]) || text;
+  const tl = (ko, en) => (LANG === "en" ? en : ko);
+  const LANG_HEADER = { "X-Beavercoat-Lang": LANG };
   const SVGNS = "http://www.w3.org/2000/svg";
   const frame = $("frame"), overlay = $("overlay"), canvasEl = $("canvas");
   const ctx = overlay.getContext("2d");
@@ -61,10 +76,11 @@
     for (const [k, v] of Object.entries(props || {})) {
       if (k === "class") el.className = v;
       else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else if (k === "title" || k === "aria-label" || k === "placeholder") el.setAttribute(k, tr(v));
       else if (k in el) el[k] = v;
       else el.setAttribute(k, v);
     }
-    for (const c of children) if (c != null) el.append(c);
+    for (const c of children) if (c != null) el.append(tr(c));
     return el;
   }
 
@@ -117,7 +133,7 @@
 
   function say(text, isError) {
     const m = $("msg");
-    m.textContent = text;
+    m.textContent = tr(text);
     m.classList.toggle("err", !!isError);
     clearTimeout(say.t);
     if (!isError) say.t = setTimeout(() => (m.textContent = ""), 5000);
@@ -125,15 +141,15 @@
 
   // ---------- names ----------
   function nameOf(el) {
-    if (isSvgRoot(el)) return "SVG" + (isOpen(el) ? " (펼침)" : "");
+    if (isSvgRoot(el)) return "SVG" + (isOpen(el) ? tl(" (펼침)", " (open)") : "");
     if (isSvgChild(el)) {
-      const base = el.getAttribute("data-name") || SHAPE_NAMES[el.tagName] || el.tagName;
+      const base = el.getAttribute("data-name") || tr(SHAPE_NAMES[el.tagName]) || el.tagName;
       return el.tagName === "text" ? `${base}: ${el.textContent.trim().slice(0, 10)}` : base;
     }
-    if (el.tagName === "IMG") return "이미지: " + (el.alt || (el.getAttribute("src") || "").split("/").pop().split("?")[0]).slice(0, 18);
+    if (el.tagName === "IMG") return tl("이미지: ", "Image: ") + (el.alt || (el.getAttribute("src") || "").split("/").pop().split("?")[0]).slice(0, 18);
     const text = (el.innerText || "").trim().replace(/\s+/g, " ").slice(0, 20);
     const names = { HEADER: "상단 메뉴", FOOTER: "하단 영역", SECTION: "섹션", MAIN: "본문", NAV: "메뉴", H1: "제목", H2: "제목", H3: "소제목", H4: "소제목", P: "글", A: "링크", BUTTON: "버튼", UL: "목록", OL: "목록", LI: "항목", FIGURE: "그림 영역", DETAILS: "접기 영역", SPAN: "글" };
-    return (names[el.tagName] || "묶음") + (text ? ": " + text : "");
+    return tr(names[el.tagName] || "묶음") + (text ? ": " + text : "");
   }
 
   const kids = (el) => {
@@ -312,9 +328,9 @@
   function exceptionLabels(key) {
     const labels = new Set();
     for (const scope of ["tablet", "mobile"]) {
-      for (const k of Object.keys((E.meta[key] && E.meta[key][scope]) || {})) labels.add(LABELS[k] || k);
+      for (const k of Object.keys((E.meta[key] && E.meta[key][scope]) || {})) labels.add(tr(LABELS[k] || k));
       for (const k of Object.keys((E.styles[key] && E.styles[key][scope]) || {})) {
-        if (!COMPILED.includes(k)) labels.add(LABELS[k] || k);
+        if (!COMPILED.includes(k)) labels.add(tr(LABELS[k] || k));
       }
     }
     return [...labels];
@@ -451,7 +467,7 @@
     try {
       const res = await fetch("/__bc/save", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Beavercoat": "1" },
+        headers: { "Content-Type": "application/json", "X-Beavercoat": "1", ...LANG_HEADER },
         body: JSON.stringify({ page: S.page, edits: E, svgs: files }),
       });
       if (!res.ok) throw new Error(String(res.status));
@@ -470,12 +486,13 @@
         const notes = [];
         if (skipped.length) {
           console.warn("beavercoat: 결과에서 빠진 파일", skipped);
-          notes.push(`${skipped.length}개 파일은 ${result.results} 폴더에 넣지 못했습니다: ${skipped[0]}${skipped.length > 1 ? " 외" : ""}`);
+          notes.push(tl(`${skipped.length}개 파일은 ${result.results} 폴더에 넣지 못했습니다: ${skipped[0]}${skipped.length > 1 ? " 외" : ""}`,
+            `${skipped.length} file(s) could not go into the ${result.results} folder: ${skipped[0]}${skipped.length > 1 ? " and more" : ""}`));
         }
-        if (over) notes.push(`글자가 넘친 박스가 ${over}개 있어, 넘친 글자는 결과에서 보이지 않습니다.`);
-        say(`저장했습니다. ${notes.join(" ")}`, true);
+        if (over) notes.push(tl(`글자가 넘친 박스가 ${over}개 있어, 넘친 글자는 결과에서 보이지 않습니다.`, `${over} box(es) have overset text, which won't show in the result.`));
+        say(tl(`저장했습니다. ${notes.join(" ")}`, `Saved. ${notes.join(" ")}`), true);
       } else {
-        say(`저장했습니다. 수정된 페이지는 ${result.results} 폴더에 있습니다.`);
+        say(tl(`저장했습니다. 수정된 페이지는 ${result.results} 폴더에 있습니다.`, `Saved. The edited pages are in the ${result.results} folder.`));
       }
       return true;
     } catch (e) {
@@ -496,7 +513,7 @@
     const ext = (file.name.split(".").pop() || "").toLowerCase();
     say("이미지 올리는 중…");
     try {
-      const res = await fetch(`/__bc/upload?ext=${encodeURIComponent(ext)}`, { method: "POST", headers: { "X-Beavercoat": "1" }, body: file });
+      const res = await fetch(`/__bc/upload?ext=${encodeURIComponent(ext)}`, { method: "POST", headers: { "X-Beavercoat": "1", ...LANG_HEADER }, body: file });
       if (!res.ok) throw new Error(String(res.status));
       const { value } = await res.json();
       const key = ensureTarget(target);
@@ -514,7 +531,7 @@
     try {
       const res = await fetch("/__bc/export", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Beavercoat": "1" },
+        headers: { "Content-Type": "application/json", "X-Beavercoat": "1", ...LANG_HEADER },
         body: JSON.stringify({ kind, page: S.page }),
       });
       if (!res.ok) throw new Error(String(res.status));
@@ -524,7 +541,7 @@
       const warnings = out.warnings || [];
       d.replaceChildren(...[
         h("h3", {}, kind === "viewer" ? "보기용 HTML을 만들었습니다" : "편집용 압축을 만들었습니다"),
-        h("p", {}, "프로젝트 폴더 안 ", h("code", {}, out.path), " 에 있습니다."),
+        h("p", {}, tl("프로젝트 폴더 안 ", "It is at "), h("code", {}, out.path), tl(" 에 있습니다.", " in the project folder.")),
         kind === "viewer" ? h("p", { class: "hint" }, "더블클릭으로 열리며, 서버나 Python이 필요 없습니다.") : h("p", { class: "hint" }, "받는 분은 압축을 풀고 ‘편집기 열기’를 더블클릭하면 됩니다. Python 3이 필요합니다."),
         warnings.length ? h("div", { class: "warn" }, "확인이 필요한 항목:", h("ul", {}, ...warnings.map((w) => h("li", {}, w)))) : null,
         h("div", { class: "btns" }, h("button", { class: "primary", onclick: () => d.close() }, "확인")),
@@ -640,7 +657,7 @@
     S.extra.filter((x) => !isSvgChild(x)).forEach(ensureTarget);
     renderProps();
     renderLayers();
-    if (S.extra.length) $("info").textContent = `${next.length}개 선택`;
+    if (S.extra.length) $("info").textContent = tl(`${next.length}개 선택`, `${next.length} selected`);
   }
 
   // The box the others line up to. Its outline stands out only while it is being used.
@@ -1856,19 +1873,19 @@
     const t = E.targets[tid];
     const fp = t ? t.fp : {};
     const what = [];
-    if (E.styles[tid] || E.meta[tid]) what.push("스타일");
-    if (E.text[tid]) what.push("글자");
-    if (E.images[tid]) what.push("이미지");
+    if (E.styles[tid] || E.meta[tid]) what.push(tr("스타일"));
+    if (E.text[tid]) what.push(tr("글자"));
+    if (E.images[tid]) what.push(tr("이미지"));
     if (E.inlineSvg[tid]) what.push("SVG");
     const label = fp.text ? `“${fp.text.slice(0, 30)}”` : fp.src ? fp.src : fp.cls ? `.${fp.cls.split(" ")[0]}` : "";
-    return `${fp.tag || "요소"} ${label} — ${what.join(", ") || "편집"}`;
+    return `${fp.tag || tr("요소")} ${label} — ${what.join(", ") || tr("편집")}`;
   }
 
   const realOrphans = () => bc.orphans().filter((tid) => E.targets[tid]);
 
   function startRelink(tid) {
     S.relinking = tid;
-    $("relinkText").textContent = `연결할 요소를 클릭하세요: ${describeTarget(tid)}`;
+    $("relinkText").textContent = tl(`연결할 요소를 클릭하세요: ${describeTarget(tid)}`, `Click the element to connect: ${describeTarget(tid)}`);
     $("relinkBar").classList.add("show");
   }
   function cancelRelink() {
@@ -1897,10 +1914,15 @@
   }
 
   // ---------- properties ----------
+  // A group's title is also its key, so it stays Korean; only the heading is translated.
+  const groupLabel = (title) => {
+    const lost = /^다시 연결할 편집 (\d+)개$/.exec(title);
+    return lost ? tl(title, `Edits to reconnect: ${lost[1]}`) : tr(title);
+  };
   const group = (title, ...children) => {
     const head = h("h3", {
       onclick: () => { S.groupOpen[title] = !head.parentElement.classList.toggle("closed"); },
-    }, title);
+    }, groupLabel(title));
     return h("div", { class: "group", "data-title": title }, head, ...children);
   };
   const field = (label, ...ctl) => h("label", { class: "field" }, h("span", {}, label), h("span", { class: "ctl" }, ...ctl));
@@ -1994,7 +2016,7 @@
 
   function renderMultiProps(box) {
     const all = selectedAll();
-    box.append(h("div", { class: "group" }, h("h3", {}, `${all.length}개 선택`),
+    box.append(h("div", { class: "group" }, h("h3", {}, tl(`${all.length}개 선택`, `${all.length} selected`)),
       h("p", { class: "hint" }, "끌면 함께 옮겨집니다. 선택한 박스를 한 번 더 클릭하면 정렬 기준이 되고, Shift를 누르고 클릭하면 선택에서 뺍니다.")));
     const to = S.alignTo || "selection";
     const waiting = to === "key" && !alignKey();
@@ -2119,7 +2141,7 @@
   function newShapeGroup(tool) {
     const isLine = tool === "line" || tool === "pen";
     const np = isLine ? S.newPaint.line : S.newPaint.shape;
-    const paint = (label, name) => colorField(np[name] === "none" ? `${label} (없음)` : label, np[name] === "none" ? "#000000" : np[name],
+    const paint = (label, name) => colorField(np[name] === "none" ? `${tr(label)} ${tl("(없음)", "(none)")}` : label, np[name] === "none" ? "#000000" : np[name],
       (v) => { np[name] = v; }, isLine ? null : () => { np[name] = "none"; });
     return group("새 도형",
       needOpenSvg(),
@@ -2133,7 +2155,7 @@
   function viewGroup() {
     const zoom = (fn) => () => { fn(); renderProps(); };
     return group("화면",
-      h("p", { class: "hint" }, `현재 배율 ${Math.round(S.zoom * 100)}%. 화면을 끌어서 옮깁니다.`),
+      h("p", { class: "hint" }, tl(`현재 배율 ${Math.round(S.zoom * 100)}%. 화면을 끌어서 옮깁니다.`, `Zoom ${Math.round(S.zoom * 100)}%. Drag to move around.`)),
       h("div", { class: "btns" },
         h("button", { onclick: zoom(() => setZoom(S.zoom / 1.25)) }, "축소"),
         h("button", { onclick: zoom(fitZoom) }, "화면에 맞추기"),
@@ -2170,11 +2192,12 @@
   function renderScopeNotice(box, el) {
     const key = S.key;
     if (writeScope() !== "base") {
-      box.append(h("div", { class: "group" }, h("div", { class: "warn" }, `${S.device === "mobile" ? "모바일" : "태블릿 이하"}에만 적용 중입니다. 큰 화면은 그대로입니다. 글자·이미지·SVG 수정은 모든 화면에 적용됩니다.`)));
+      box.append(h("div", { class: "group" }, h("div", { class: "warn" }, tl(`${S.device === "mobile" ? "모바일" : "태블릿 이하"}에만 적용 중입니다. 큰 화면은 그대로입니다. 글자·이미지·SVG 수정은 모든 화면에 적용됩니다.`,
+        `Changes apply to ${S.device === "mobile" ? "mobile" : "tablet and smaller"} only. Larger screens stay as they are. Text, image and SVG edits apply to every screen.`))));
     }
     const labels = exceptionLabels(key);
     if (labels.length) {
-      box.append(h("div", { class: "group" }, h("div", { class: "warn" }, `화면 크기별로 다른 값: ${labels.join(", ")}`,
+      box.append(h("div", { class: "group" }, h("div", { class: "warn" }, tl(`화면 크기별로 다른 값: ${labels.join(", ")}`, `Values that differ by screen size: ${labels.join(", ")}`),
         h("div", { class: "btns" }, h("button", {
           onclick: () => { mutate("공통값으로", () => clearExceptions(key), { compile: false }); renderProps(); },
         }, "공통값으로 되돌리기")))));
@@ -2233,9 +2256,9 @@
       };
       box.append(h("div", { class: "group" }, h("div", { class: "warn" },
         lost.clip
-          ? `‘${nameOf(lost.clip)}’ 밖으로 나가 잘려서 보이지 않습니다. 이 상자는 넘치는 내용을 잘라 냅니다.`
+          ? tl(`‘${nameOf(lost.clip)}’ 밖으로 나가 잘려서 보이지 않습니다. 이 상자는 넘치는 내용을 잘라 냅니다.`, `It has moved outside “${nameOf(lost.clip)}” and is clipped. That box cuts off whatever overflows it.`)
           : lost.off ? "페이지 밖으로 나가 보이지 않습니다."
-          : `‘${nameOf(lost.cover)}’ 아래에 가려 보이지 않습니다.`,
+          : tl(`‘${nameOf(lost.cover)}’ 아래에 가려 보이지 않습니다.`, `It is hidden under “${nameOf(lost.cover)}”.`),
         h("div", { class: "btns" },
           h("button", { onclick: back }, "원래 자리로"),
           lost.clip ? h("button", { title: "그 상자가 넘치는 내용을 잘라 내지 않게 합니다. 스크롤되는 상자라면 더 작은 화면에서는 원래처럼 스크롤됩니다.", onclick: unclip }, "잘리지 않게") : null))));
@@ -2259,10 +2282,10 @@
         number("가로 %", round((m.sx ?? 1) * 100, 1), (v) => mm("크기 변경", (w) => { w.sx = Math.max(1, v) / 100; })),
         number("세로 %", round((m.sy ?? 1) * 100, 1), (v) => mm("크기 변경", (w) => { w.sy = Math.max(1, v) / 100; }))),
       textBox && hasFixedHeight(k) ? h("div", { class: "btns" }, h("button", { onclick: () => fitBoxToText(k) }, "세로를 글자에 맞추기")) : null,
-      win.getComputedStyle(el).display.endsWith("grid") ? selectField("가로 칸 수", [1, 2, 3, 4, 5, 6].map((n) => [String(n), `${n}칸`]),
+      win.getComputedStyle(el).display.endsWith("grid") ? selectField("가로 칸 수", [1, 2, 3, 4, 5, 6].map((n) => [String(n), tl(`${n}칸`, `${n} columns`)]),
         String(win.getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length),
         (v) => { mut("가로 칸 수", () => setStyle(k, "grid-template-columns", `repeat(${v}, minmax(0, 1fr))`)); renderProps(); }) : null,
-      parentGrid ? selectField("차지할 칸", [["", "기본"], ...Array.from({ length: parentGrid.cols - 1 }, (_, i) => [`span ${i + 2}`, `${i + 2}칸`]), ["1 / -1", "한 줄 전체"]], spanNow,
+      parentGrid ? selectField("차지할 칸", [["", "기본"], ...Array.from({ length: parentGrid.cols - 1 }, (_, i) => [`span ${i + 2}`, tl(`${i + 2}칸`, `${i + 2} columns`)]), ["1 / -1", "한 줄 전체"]], spanNow,
         (v) => { mut("차지할 칸", () => setStyle(k, "grid-column", v || null)); renderProps(); }) : null,
       slider("회전", -180, 180, 1, round(m.rot || 0), (v) => mm("회전", (w) => { w.rot = v; }), "°"),
       el.parentElement ? alignRow(el, mm) : null,
@@ -2429,7 +2452,7 @@
     renderProps();
   }
 
-  const fontPost = (url, body) => fetch(url, { method: "POST", headers: { "X-Beavercoat": "1" }, body });
+  const fontPost = (url, body) => fetch(url, { method: "POST", headers: { "X-Beavercoat": "1", ...LANG_HEADER }, body });
 
   async function getFont(font) {
     for (let i = 0; i < font.urls.length; i++) {
@@ -2459,9 +2482,10 @@
     try {
       if (!font.installed) await getFont(font);
       if (k) await applyFont(font, k);
-      else say(`${font.family}을(를) 받았습니다. 글자를 클릭한 뒤 고르면 적용됩니다.`);
+      else say(tl(`${font.family}을(를) 받았습니다. 글자를 클릭한 뒤 고르면 적용됩니다.`, `${font.family} is ready. Click some text, then pick it to apply.`));
     } catch (err) {
-      say(`${font.family}을(를) ${font.installed ? "적용하지" : "받지"} 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.`, true);
+      say(tl(`${font.family}을(를) ${font.installed ? "적용하지" : "받지"} 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.`,
+        `Couldn't ${font.installed ? "apply" : "fetch"} ${font.family}. Check the internet connection and try again.`), true);
     }
     S.fontBusy.delete(font.id);
     renderProps();
@@ -2477,7 +2501,7 @@
       S.fonts = (await list.json()).fonts;
       const font = S.fonts.find((f) => f.id === id);
       if (k) await applyFont(font, k);
-      else say(`${font.family}을(를) 추가했습니다. 글자를 클릭한 뒤 고르면 적용됩니다.`);
+      else say(tl(`${font.family}을(를) 추가했습니다. 글자를 클릭한 뒤 고르면 적용됩니다.`, `${font.family} added. Click some text, then pick it to apply.`));
     } catch (err) {
       say("글꼴을 올리지 못했습니다.", true);
     }
@@ -2494,7 +2518,7 @@
       const missing = font && !font.installed;
       list.append(h("button", {
         class: "fontrow" + (name === current ? " on" : ""),
-        title: missing ? `${name} 받기 (${fontSize(font.size)})` : name,
+        title: missing ? tl(`${name} 받기 (${fontSize(font.size)})`, `Fetch ${name} (${fontSize(font.size)})`) : name,
         onclick: (e) => { e.preventDefault(); onclick(); },
       },
       h("span", { class: "fname" }, name),
@@ -2810,15 +2834,15 @@
   function renderTop() {
     $("undo").disabled = S.idx <= 0;
     $("redo").disabled = S.idx >= S.history.length - 1;
-    $("save").textContent = isDirty() ? "저장 •" : "저장";
+    $("save").textContent = tr(isDirty() ? "저장 •" : "저장");
     $("onlyHereLabel").hidden = S.device === "desktop";
     $("onlyHere").checked = S.onlyHere;
-    $("onlyHereText").textContent = S.device === "mobile" ? "모바일에만 적용" : "태블릿 이하에만 적용";
+    $("onlyHereText").textContent = tr(S.device === "mobile" ? "모바일에만 적용" : "태블릿 이하에만 적용");
   }
 
   function renderTools() {
-    $("tools").replaceChildren(...TOOLS.map((t) => iconButton(t.id, `${t.name} (${t.key.toUpperCase()})`, () => setTool(t.id), { class: t.id === S.tool ? "on" : "" })));
-    $("hint").textContent = TOOLS.find((t) => t.id === S.tool).hint;
+    $("tools").replaceChildren(...TOOLS.map((t) => iconButton(t.id, `${tr(t.name)} (${t.key.toUpperCase()})`, () => setTool(t.id), { class: t.id === S.tool ? "on" : "" })));
+    $("hint").textContent = tr(TOOLS.find((t) => t.id === S.tool).hint);
   }
 
   function setTool(id) {
@@ -2875,7 +2899,7 @@
     $("undo").onclick = () => restore(S.idx - 1);
     $("redo").onclick = () => restore(S.idx + 1);
     $("page").onchange = (e) => {
-      if (isDirty() && !confirm("저장하지 않은 수정이 있습니다. 그래도 다른 페이지로 이동할까요?")) {
+      if (isDirty() && !confirm(tr("저장하지 않은 수정이 있습니다. 그래도 다른 페이지로 이동할까요?"))) {
         e.target.value = S.page;
         return;
       }
@@ -3057,7 +3081,7 @@
   }
 
   async function resetAll() {
-    if (!confirm("이 페이지의 모든 편집을 처음 상태로 되돌릴까요? 저장 전까지는 되돌리기로 복구할 수 있습니다.")) return;
+    if (!confirm(tr("이 페이지의 모든 편집을 처음 상태로 되돌릴까요? 저장 전까지는 되돌리기로 복구할 수 있습니다."))) return;
     const originals = [];
     for (const rec of S.svgs) {
       if (rec.kind === "file") {
@@ -3109,16 +3133,45 @@
     return false;
   }
 
+  // editor.html is written in Korean; in English its texts and tooltips are swapped in place.
+  function translatePage() {
+    document.documentElement.lang = LANG;
+    if (LANG !== "en") return;
+    document.title = tr(document.title);
+    for (const el of document.querySelectorAll("[title], [aria-label], [placeholder]")) {
+      for (const attr of ["title", "aria-label", "placeholder"]) {
+        if (el.hasAttribute(attr)) el.setAttribute(attr, tr(el.getAttribute(attr)));
+      }
+    }
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      const text = node.nodeValue.trim();
+      if (text && EN[text]) node.nodeValue = node.nodeValue.replace(text, EN[text]);
+    }
+  }
+
+  function bindLanguage() {
+    const pick = $("lang");
+    pick.value = LANG;
+    pick.onchange = () => {
+      if (isDirty() && !confirm(tr("저장하지 않은 수정이 있습니다. 언어를 바꾸면 다시 불러옵니다. 계속할까요?"))) { pick.value = LANG; return; }
+      try { localStorage.setItem("beavercoat-lang", pick.value); } catch (err) { /* storage may be blocked */ }
+      location.reload();
+    };
+  }
+
   async function start() {
+    translatePage();
+    bindLanguage();
     bindUI();
     renderTools();
     const params = new URLSearchParams(location.search);
     let state;
-    const res = await fetch("/__bc/state" + (params.get("page") ? "?page=" + encodeURIComponent(params.get("page")) : ""), { cache: "no-store" });
+    const res = await fetch("/__bc/state" + (params.get("page") ? "?page=" + encodeURIComponent(params.get("page")) : ""), { cache: "no-store", headers: LANG_HEADER });
     state = await res.json();
     if (res.status === 409) {
       // Nothing is opened for editing, because saving would replace the damaged file.
-      say(`저장된 편집 파일이 손상되어 열 수 없습니다. 파일을 고치거나 지운 뒤 다시 열어 주세요: ${state.file}`, true);
+      say(tl(`저장된 편집 파일이 손상되어 열 수 없습니다. 파일을 고치거나 지운 뒤 다시 열어 주세요: ${state.file}`, `The saved edits are damaged and can't be opened. Fix or delete the file, then open it again: ${state.file}`), true);
       return;
     }
     if (!res.ok || !state.page) {
@@ -3156,7 +3209,7 @@
     if (first) S.expanded.add(first);
     renderAll();
     const lost = realOrphans();
-    if (lost.length) say(`${lost.length}개 편집을 다시 연결해야 합니다. 오른쪽 목록을 확인해 주세요.`, true);
+    if (lost.length) say(tl(`${lost.length}개 편집을 다시 연결해야 합니다. 오른쪽 목록을 확인해 주세요.`, `${lost.length} edit(s) need reconnecting. See the list on the right.`), true);
   }
 
   start();

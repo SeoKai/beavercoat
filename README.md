@@ -44,29 +44,33 @@ Try it on the included sample:
 python3 skills/beavercoat/app/beavercoat.py samples/basic
 ```
 
+## Language
+
+The editor follows the browser's language: Korean for a Korean browser, English otherwise. Switch it with the language menu at the right of the top bar; the choice is remembered. Messages printed by the command, and the names of new folders and files, follow the system language. Add `--lang en` or `--lang ko` to choose, or set `BEAVERCOAT_LANG`.
+
 ## How files are kept
 
 | Folder | What's in it |
 |---|---|
 | your files | Never modified |
 | `.design-edits/` | Your saved edits |
-| `결과/` | A copy with edits applied, rebuilt on every save |
-| `공유/` | Files you exported to send |
+| `results/` | A copy with edits applied, rebuilt on every save |
+| `share/` | Files you exported to send |
 
-If the project already has its own `결과/` or `공유/` folder, it is left alone and `결과-beavercoat/` or `공유-beavercoat/` is used instead. Hidden files such as `.env`, key files, and links pointing outside the project stay out of results and zips, and you are told which were left out.
+In Korean these folders are `결과/` and `공유/`. A project keeps the folders it already has, whichever language made them. If the project already has its own folder with one of those names, it is left alone and `results-beavercoat/` or `share-beavercoat/` is used instead. Hidden files such as `.env`, key files, and links pointing outside the project stay out of results and zips, and you are told which were left out.
 
 ## Sharing
 
-- **보기용 내보내기 (view-only):** one HTML file. It opens by double-click with no server or Python. Web fonts and files hosted elsewhere still need internet, and the editor lists them when you export.
-- **편집용 압축 (editable):** a zip with the editor inside. Recipients unzip it and double-click `편집기 열기`. They need Python 3 but not Claude.
+- **Export for viewing:** one HTML file, `share/<page>-view.html`. It opens by double-click with no server or Python. Web fonts and files hosted elsewhere still need internet, and the editor lists them when you export.
+- **Export editable zip:** a zip with the editor inside, `share/<project>-editable.zip`. Recipients unzip it and double-click `Open editor`. They need Python 3 but not Claude.
 
 ## Fonts
 
 Pick a font in the text tool (T). Fonts marked `↓` are fetched and applied with one click, then stay in `~/.beavercoat/fonts/` so other projects don't fetch them again. This is the only time the internet is used.
 
 - **Listed fonts:** Pretendard, Noto Sans KR, Nanum Gothic, IBM Plex Sans KR, Noto Serif KR, Nanum Myeongjo, Inter, Roboto, Montserrat, Poppins and Playfair Display. All are OFL-licensed, pinned to a version, and checked by hash.
-- **내 글꼴 올리기 (add your own):** ttf, otf, woff or woff2, for fonts such as Adobe's that can't be listed. Check that the license lets you share it.
-- **Exports:** only the fonts a page actually uses go into results, view-only files and zips. A Korean font adds about 1–2 MB. Listed fonts carry their copyright lines and the OFL text with them: `beavercoat-assets/글꼴-라이선스.txt` in results and zips, a comment at the top of a view-only file.
+- **Add my font:** ttf, otf, woff or woff2, for fonts such as Adobe's that can't be listed. Check that the license lets you share it.
+- **Exports:** only the fonts a page actually uses go into results, view-only files and zips. A Korean font adds about 1–2 MB. Listed fonts carry their copyright lines and the OFL text with them: `beavercoat-assets/font-licenses.txt` in results and zips, a comment at the top of a view-only file.
 - **Coverage:** the listed Korean fonts hold the 2,350 common syllables. Other characters and some symbols may show in a different font.
 
 ## Re-exporting from your design tool
