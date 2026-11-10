@@ -66,7 +66,7 @@ python3 skills/beavercoat/app/beavercoat.py samples/basic
 
 - **목록의 글꼴:** Pretendard, Noto Sans KR, 나눔고딕, IBM Plex Sans KR, Noto Serif KR, 나눔명조, Inter, Roboto, Montserrat, Poppins, Playfair Display. 모두 재배포가 허용된 OFL 라이선스이고, 버전을 고정해 받은 파일을 해시로 검사합니다.
 - **내 글꼴 올리기:** ttf, otf, woff, woff2를 넣을 수 있습니다. Adobe 글꼴처럼 목록에 없는 글꼴은 이렇게 넣으며, 공유해도 되는 라이선스인지는 직접 확인해 주세요.
-- **내보내기:** 페이지에서 실제로 쓴 글꼴만 결과, 보기용 파일, 압축에 담습니다. 한글 글꼴은 하나에 1~2MB 정도 파일이 커집니다.
+- **내보내기:** 페이지에서 실제로 쓴 글꼴만 결과, 보기용 파일, 압축에 담습니다. 한글 글꼴은 하나에 1~2MB 정도 파일이 커집니다. 목록의 글꼴은 저작권 표시와 OFL 원문이 함께 들어갑니다. 결과와 압축에는 `beavercoat-assets/글꼴-라이선스.txt`로, 보기용 파일에는 맨 위 주석으로 들어갑니다.
 - **글자 범위:** 목록의 한글 글꼴은 자주 쓰는 완성형 2,350자를 담습니다. 그 밖의 글자와 일부 기호는 다른 글꼴로 보일 수 있습니다.
 
 ## 디자인 도구에서 다시 내보낼 때
@@ -95,3 +95,7 @@ python3 -m unittest discover tests
 ```
 
 Windows에서 직접 확인할 항목은 [docs/windows-checklist.md](docs/windows-checklist.md)에 있습니다.
+
+## 라이선스
+
+MIT입니다. [LICENSE](LICENSE)를 참고해 주세요. 목록의 글꼴은 이 저장소에 들어 있지 않고 고를 때 받으며, SIL Open Font License 1.1을 따릅니다.

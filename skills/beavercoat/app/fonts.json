@@ -5,6 +5,7 @@
   "group": "한글 고딕",
   "fallback": "sans-serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright (c) 2021, Kil Hyung-jin (https://github.com/orioncactus/pretendard), with Reserved Font Name Pretendard.",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/woff2/PretendardVariable.woff2",
@@ -21,6 +22,7 @@
   "group": "한글 고딕",
   "fallback": "sans-serif",
   "license": "OFL-1.1",
+  "copyright": "Google Inc.",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.3.1/files/noto-sans-kr-korean-300-normal.woff2",
@@ -86,6 +88,7 @@
   "group": "한글 고딕",
   "fallback": "sans-serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright © 2010 NHN Corporation. All rights reserved. Font designed by Sandoll Communications Inc.",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-gothic@5.3.0/files/nanum-gothic-korean-400-normal.woff2",
@@ -123,6 +126,7 @@
   "group": "한글 고딕",
   "fallback": "sans-serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright 2018 IBM Corp. All rights reserved.",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-kr@5.3.0/files/ibm-plex-sans-kr-korean-300-normal.woff2",
@@ -188,6 +192,7 @@
   "group": "한글 명조",
   "fallback": "serif",
   "license": "OFL-1.1",
+  "copyright": "Google Inc.",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-kr@5.3.1/files/noto-serif-kr-korean-400-normal.woff2",
@@ -225,6 +230,7 @@
   "group": "한글 명조",
   "fallback": "serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright © 2010 NHN Corporation. All rights reserved. Font designed by FONTRIX.",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource/nanum-myeongjo@5.3.0/files/nanum-myeongjo-korean-400-normal.woff2",
@@ -262,6 +268,7 @@
   "group": "영문",
   "fallback": "sans-serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/inter@5.3.0/files/inter-latin-wght-normal.woff2",
@@ -278,6 +285,7 @@
   "group": "영문",
   "fallback": "sans-serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic)",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/roboto@5.3.0/files/roboto-latin-wght-normal.woff2",
@@ -294,6 +302,7 @@
   "group": "영문",
   "fallback": "sans-serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/montserrat@5.3.0/files/montserrat-latin-wght-normal.woff2",
@@ -310,6 +319,7 @@
   "group": "영문",
   "fallback": "sans-serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.3.0/files/poppins-latin-300-normal.woff2",
@@ -354,6 +364,7 @@
   "group": "영문",
   "fallback": "serif",
   "license": "OFL-1.1",
+  "copyright": "Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name \"Playfair Display\".",
   "files": [
    {
     "url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/playfair-display@5.3.0/files/playfair-display-latin-wght-normal.woff2",

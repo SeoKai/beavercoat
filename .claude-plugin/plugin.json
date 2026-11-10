@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Edit HTML prototypes visually like Photoshop without touching the original files.",
   "author": { "name": "SeoKai" },
+  "license": "MIT",
   "repository": "https://github.com/SeoKai/beavercoat",
   "keywords": ["design", "prototype", "html", "svg", "editor"]
 }

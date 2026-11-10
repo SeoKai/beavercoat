@@ -45,7 +45,8 @@ TOOL_DIRS = {EDITS_DIR, BUNDLED_APP_DIR, ".git", ".claude", "node_modules", "__p
 PRIVATE_EXTS = (".pem", ".key", ".p12", ".pfx")
 PRIVATE_NAMES = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
 SKIP_FILES = {".DS_Store", "Thumbs.db"}
-APP_FILES = {"editor.html", "editor.js", "apply.js", "fonts.json"}
+APP_FILES = {"editor.html", "editor.js", "apply.js", "fonts.json", "OFL.txt"}
+FONT_NOTICE = "글꼴-라이선스.txt"
 FONT_STORE_ENV = "BEAVERCOAT_FONT_DIR"
 FONT_FORMATS = {"woff2": "woff2", "woff": "woff", "ttf": "truetype", "otf": "opentype"}
 FONT_MAGIC = {b"wOF2": "woff2", b"wOFF": "woff", b"OTTO": "otf", b"\x00\x01\x00\x00": "ttf", b"true": "ttf"}
@@ -402,6 +403,26 @@ def font_faces(edits):
                 yield face
 
 
+def font_notice(all_edits):
+    """The copyright lines and license that must travel with the listed fonts these edits use.
+    Empty when none is used. Fonts people add themselves are theirs to check."""
+    used = set()
+    for edits in all_edits:
+        used |= set(fonts_in_use(edits))
+    fonts = [font for font in font_catalog() if font["family"] in used and font.get("copyright")]
+    if not fonts:
+        return ""
+    try:
+        with open(os.path.join(APP_DIR, "OFL.txt"), encoding="utf-8") as f:
+            license_text = f.read()
+    except OSError:
+        return ""
+    lines = ["이 결과물에 담긴 글꼴과 그 저작권 표시입니다.", ""]
+    for font in fonts:
+        lines += [font["family"], font["copyright"], ""]
+    return "\n".join(lines) + "\n" + license_text
+
+
 def font_uploads(edits):
     return {face["src"][7:] for face in font_faces(edits) if face["src"].startswith("upload:")}
 
@@ -525,6 +546,9 @@ def build_results(project):
     for upload in uploads:
         if os.path.isfile(project.upload_file(upload)):
             wanted.add(f"beavercoat-assets/{os.path.basename(upload)}")
+    notice = font_notice(pages.values())
+    if notice:
+        wanted.add(f"beavercoat-assets/{FONT_NOTICE}")
 
     for rel in set(project.read_manifest(name)) - wanted:
         remove_generated(out, rel)
@@ -549,6 +573,11 @@ def build_results(project):
                 copy_if_changed(src, os.path.join(out, "beavercoat-assets", os.path.basename(upload)))
             except OSError:
                 skipped.append(f"{upload}: 넣은 이미지를 복사하지 못했습니다")
+    if notice:
+        try:
+            write_atomic(os.path.join(out, "beavercoat-assets", FONT_NOTICE), notice.encode("utf-8"))
+        except OSError:
+            skipped.append(f"{FONT_NOTICE}: 글꼴 라이선스 파일을 쓰지 못했습니다")
     return out, sorted(set(skipped))
 
 
@@ -831,6 +860,10 @@ def build_viewer(project, page):
                 else:
                     inliner.warnings.append(f"넣은 글꼴을 찾지 못했습니다: {face['src'][7:]}")
         snippet = edits_snippet(edits, "") + f"<script>{apply_source()}</script>"
+        notice = font_notice([edits])
+        if notice:
+            # The fonts travel inside this one file, so their license does too.
+            snippet = "<!--\n" + notice.replace("-->", "- ->") + "-->" + snippet
     html = page_with_snippet(html, snippet)
     # Folder names stay in the file name, or a/index.html and b/index.html would overwrite each other.
     stem = re.sub(r"\.html?$", "", page.replace("/", "-"), flags=re.I)

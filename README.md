@@ -66,7 +66,7 @@ Pick a font in the text tool (T). Fonts marked `↓` are fetched and applied wit
 
 - **Listed fonts:** Pretendard, Noto Sans KR, Nanum Gothic, IBM Plex Sans KR, Noto Serif KR, Nanum Myeongjo, Inter, Roboto, Montserrat, Poppins and Playfair Display. All are OFL-licensed, pinned to a version, and checked by hash.
 - **내 글꼴 올리기 (add your own):** ttf, otf, woff or woff2, for fonts such as Adobe's that can't be listed. Check that the license lets you share it.
-- **Exports:** only the fonts a page actually uses go into results, view-only files and zips. A Korean font adds about 1–2 MB.
+- **Exports:** only the fonts a page actually uses go into results, view-only files and zips. A Korean font adds about 1–2 MB. Listed fonts carry their copyright lines and the OFL text with them: `beavercoat-assets/글꼴-라이선스.txt` in results and zips, a comment at the top of a view-only file.
 - **Coverage:** the listed Korean fonts hold the 2,350 common syllables. Other characters and some symbols may show in a different font.
 
 ## Re-exporting from your design tool
@@ -95,3 +95,7 @@ python3 -m unittest discover tests
 ```
 
 Windows steps to verify by hand are in [docs/windows-checklist.md](docs/windows-checklist.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE). The listed fonts are not part of this repository; they are fetched when chosen and are under the SIL Open Font License 1.1.

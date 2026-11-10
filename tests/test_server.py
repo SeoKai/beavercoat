@@ -567,7 +567,7 @@ class FontTest(ServerTest):
             "url": "https://example.test/a.woff2", "sha256": hashlib.sha256(self.BODY).hexdigest(),
             "size": len(self.BODY), "weight": "400", "range": "",
         }
-        catalog = [{"id": "sample", "family": "Sample", "group": "영문", "fallback": "serif", "files": [entry]}]
+        catalog = [{"id": "sample", "family": "Sample", "group": "영문", "fallback": "serif", "copyright": "Copyright 2020 Sample Authors", "files": [entry]}]
         bc.font_catalog = lambda: catalog
 
     def tearDown(self):
@@ -651,12 +651,25 @@ class FontTest(ServerTest):
         out, _ = bc.build_zip(self.project)
         names = zipfile.ZipFile(out).namelist()
         self.assertTrue(any(n.endswith(f".design-edits/uploads/{name}") for n in names))
+        self.assertTrue(any(n.endswith(f"beavercoat-assets/{bc.FONT_NOTICE}") for n in names))
+
+    def test_used_font_carries_its_license(self):
+        edits, _ = self.edits_with_font()
+        self.assertEqual(self.post("/__bc/save", {"page": "index.html", "edits": edits, "svgs": {}})[0], 200)
+        notice = Path(self.root, "결과", "beavercoat-assets", bc.FONT_NOTICE).read_text(encoding="utf-8")
+        self.assertIn("Copyright 2020 Sample Authors", notice)
+        self.assertIn("SIL OPEN FONT LICENSE Version 1.1", notice)
+        out, _ = bc.build_viewer(self.project, "index.html")
+        page = Path(out).read_text(encoding="utf-8")
+        self.assertIn("Copyright 2020 Sample Authors", page)
+        self.assertEqual(page.count("-->"), page.count("<!--"))
 
     def test_font_no_longer_used_is_left_out(self):
         edits, name = self.edits_with_font(used=False)
         self.assertEqual(self.post("/__bc/save", {"page": "index.html", "edits": edits, "svgs": {}})[0], 200)
         self.assertEqual(json.loads(Path(self.root, ".design-edits", "pages", "index.html.json").read_text(encoding="utf-8"))["fonts"], {})
         self.assertFalse(Path(self.root, "결과", "beavercoat-assets", name).exists())
+        self.assertFalse(Path(self.root, "결과", "beavercoat-assets", bc.FONT_NOTICE).exists())
         out, _ = bc.build_zip(self.project)
         self.assertFalse(any(name in n for n in zipfile.ZipFile(out).namelist()))
 
