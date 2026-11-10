@@ -88,6 +88,10 @@ Matching can still fail or, rarely, go wrong on near-identical repeated elements
 - A text box with a fixed height can clip text on narrow screens.
 - The server only listens on your own computer (127.0.0.1) and serves the project folder to your browser. Only the browser goes online, and only to fetch a listed font.
 
+## Feedback
+
+Found a bug, something awkward, or a feature you want? Email [seokai0509@gmail.com](mailto:seokai0509@gmail.com). A screenshot or the file you were working on helps a lot.
+
 ## Development
 
 ```bash
