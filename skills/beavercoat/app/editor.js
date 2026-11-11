@@ -52,7 +52,7 @@
   const S = {
     page: null, project: "", pages: [], tool: "move", zoom: 1, device: "desktop", onlyHere: false, panX: 0,
     sel: null, key: null, hover: null, hits: [], drag: null, pen: null, anchor: null,
-    history: [], idx: -1, savedIdx: -1, lastLabel: null, lastTime: 0, lastGroup: null, groupCounter: 0,
+    history: [], idx: -1, savedIdx: -1, version: 0, saving: null, lastLabel: null, lastTime: 0, lastGroup: null, groupCounter: 0,
     paint: "fill", expanded: new WeakSet(), spaceHand: false, comparing: false, editing: null,
     uploadTarget: null, ready: false, relinking: null, svgs: [], importRoot: null, targetLog: {},
     extra: [], groupOpen: {}, fonts: null, fontBusy: new Set(), fontScroll: 0, pageFonts: null,
@@ -353,12 +353,14 @@
   const svgSnapshot = () => S.svgs.map((r) => ({ ref: r.ref, inner: r.root.innerHTML, viewBox: r.root.getAttribute("viewBox"), attrs: clone(r.rootAttrs) }));
   const snapshot = () => ({ edits: JSON.stringify(E), svgs: svgSnapshot() });
 
+  // A history entry from before an SVG was opened has no state for it: it goes back to how it
+  // looked when opened. (Not to the saved state: saving moves that, but not the past.)
   function restoreSvgs(list) {
     for (const rec of S.svgs) {
       const st = list.find((s) => s.ref === rec.ref);
-      const inner = st ? st.inner : rec.baseline;
+      const inner = st ? st.inner : rec.openInner;
       if (rec.root.innerHTML !== inner) rec.root.innerHTML = inner;
-      const vb = st ? st.viewBox : rec.baselineViewBox;
+      const vb = st ? st.viewBox : rec.openViewBox;
       if (vb) rec.root.setAttribute("viewBox", vb);
       if (st && st.attrs) rec.rootAttrs = clone(st.attrs);
     }
@@ -366,6 +368,7 @@
 
   // Every change goes through here. Repeated changes of one action become one history entry.
   function mutate(label, fn, opts = {}) {
+    S.version++;
     fn();
     if (S.key && opts.compile !== false && !isSvgChild(S.sel)) compile(S.key);
     applyEdits();
@@ -395,6 +398,7 @@
 
   function restore(i) {
     if (i < 0 || i >= S.history.length) return;
+    S.version++;
     S.idx = i;
     const st = S.history[i];
     const before = E.targets;
@@ -449,8 +453,14 @@
         else if (changed) files[rec.ref] = serializeFileSvg(rec);
       } else if (dropped) {
         delete E.inlineSvg[rec.ref];
-      } else if (changed) {
+      } else if (inner !== rec.openInner) {
         E.inlineSvg[rec.ref] = inner;
+      } else if (rec.openValue == null) {
+        // As it was when opened. Decided from the SVG itself, not from E: after an undo,
+        // E can be from before an earlier save wrote the SVG into it.
+        delete E.inlineSvg[rec.ref];
+      } else {
+        E.inlineSvg[rec.ref] = rec.openValue;
       }
     }
     return files;
@@ -458,12 +468,22 @@
 
   async function save() {
     if (!S.ready) return false;
+    if (S.saving) return S.saving;
+    S.saving = saveNow().finally(() => { S.saving = null; });
+    return S.saving;
+  }
+
+  async function saveNow() {
     endTextEdit(true);
     finishPen();
     say("저장 중…");
     const files = collectSvgChanges();
     restoreMissingTargets();
     pruneTargets();
+    // What is sent is what counts as saved, even if something changes before the answer.
+    const sentAt = S.idx, sentVersion = S.version;
+    const sent = S.svgs.map((rec) => [rec, rec.root.innerHTML, rec.root.getAttribute("viewBox")]);
+    S.history[sentAt] = { ...S.history[sentAt], ...snapshot() };
     try {
       const res = await fetch("/__bc/save", {
         method: "POST",
@@ -472,13 +492,12 @@
       });
       if (!res.ok) throw new Error(String(res.status));
       const result = await res.json();
-      for (const rec of S.svgs) {
-        rec.baseline = rec.root.innerHTML;
-        rec.baselineViewBox = rec.root.getAttribute("viewBox");
+      for (const [rec, inner, viewBox] of sent) {
+        rec.baseline = inner;
+        rec.baselineViewBox = viewBox;
       }
       refreshSvgImages(Object.keys(files));
-      S.history[S.idx] = { ...S.history[S.idx], ...snapshot() };
-      S.savedIdx = S.idx;
+      if (S.version === sentVersion) S.savedIdx = sentAt;
       renderTop();
       const skipped = result.skipped || [];
       const over = oversetKeys().length;
@@ -742,7 +761,7 @@
       const original = bc.originalSvg(key) ?? el.innerHTML;
       el.setAttribute("data-bc-open", "");
       ensureIds(el);
-      rec = { kind: "inline", ref: key, root: el, origInner: original };
+      rec = { kind: "inline", ref: key, root: el, origInner: original, openValue: E.inlineSvg[key] ?? null };
     } else {
       const path = fileSvgPath(el);
       if (!path) return null;
@@ -777,8 +796,8 @@
       ensureIds(root);
       rec = { kind: "file", ref: path, root, rootAttrs, img: el };
     }
-    rec.baseline = rec.root.innerHTML;
-    rec.baselineViewBox = rec.root.getAttribute("viewBox");
+    rec.baseline = rec.openInner = rec.root.innerHTML;
+    rec.baselineViewBox = rec.openViewBox = rec.root.getAttribute("viewBox");
     S.svgs.push(rec);
     S.history[S.idx] = { ...S.history[S.idx], svgs: svgSnapshot() };
     S.expanded.add(rec.root);
@@ -1729,6 +1748,7 @@
       : addShape(root, "line", { x1: a.x, y1: a.y, x2: a.x, y2: a.y, "stroke-linecap": "round", ...paint });
     const label = { rect: "사각형 그리기", ellipse: "타원 그리기", line: "직선 그리기" }[tool];
     let drew = false;
+    const before = { idx: S.idx, savedIdx: S.savedIdx, redo: S.history.slice(S.idx + 1) };
     beginDrag(e, (q, ev, group) => {
       drew = true;
       const b = canvasToLocal(root, q.x, q.y);
@@ -1752,7 +1772,13 @@
       const box = el.getBBox();
       if (!drew || (box.width < 1 && box.height < 1)) {
         el.remove();
-        if (drew) restore(Math.max(0, S.idx - 1));
+        if (drew) {
+          // Too small to keep: put history back as it was, redo steps included.
+          S.history.length = before.idx + 1;
+          S.history.push(...before.redo);
+          S.savedIdx = before.savedIdx;
+          restore(before.idx);
+        }
         return;
       }
       setTool("move");
@@ -1830,7 +1856,8 @@
   function onEditInput() { renderTop(); }
   function onEditKey(e) {
     // ⌘S reaches onKey through the page's own listener, which saves the edit first.
-    if (e.key === "Escape") { e.preventDefault(); endTextEdit(false); }
+    // Esc only ends the edit; it must not reach the page shortcut that clears the selection.
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); endTextEdit(false); }
     else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); endTextEdit(true); }
   }
   function onEditBeforeInput(e) {
@@ -2996,7 +3023,7 @@
     for (const rec of S.svgs) {
       if (!on) {
         const st = S.history[S.idx].svgs.find((s) => s.ref === rec.ref);
-        rec.root.innerHTML = st ? st.inner : rec.baseline;
+        rec.root.innerHTML = st ? st.inner : rec.openInner;
         continue;
       }
       if (rec.origInner == null) rec.origInner = (await originalSvgFile(rec)).inner;
@@ -3156,6 +3183,8 @@
     pick.onchange = () => {
       if (isDirty() && !confirm(tr("저장하지 않은 수정이 있습니다. 언어를 바꾸면 다시 불러옵니다. 계속할까요?"))) { pick.value = LANG; return; }
       try { localStorage.setItem("beavercoat-lang", pick.value); } catch (err) { /* storage may be blocked */ }
+      S.savedIdx = S.idx; // The user already chose to leave.
+      S.editing = null;
       location.reload();
     };
   }
